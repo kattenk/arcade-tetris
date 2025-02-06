@@ -566,7 +566,7 @@ class Piece:
             self.place(board)
 
 # You could put this code outside of the "if __name__ == "__main__"" block
-# but this theoretically Python to load this file without starting the game
+# but this theoretically allows you to load this file without starting the game
 # allowing for other modules to use classes from this, etc.
 # It's entirely useless in this case, but I thought I'd leave it in.
 if __name__ == "__main__":
