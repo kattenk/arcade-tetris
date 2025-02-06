@@ -1,5 +1,5 @@
 # arcade-tetris
-![Game Screenshot](screenshot.png)
+<img src="screenshot.png" alt="alt text" width="200" height="400">
 An implementation of Tetris using Python's wonderful Arcade library
 
 this project was originally written using version `2.6.17` of the `arcade` package.
