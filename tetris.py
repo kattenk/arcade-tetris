@@ -23,7 +23,7 @@ class Position:
     def copy(self):
         return Position(self.x, self.y)
     
-    # This is for unpacking Postions like tuples
+    # This is for unpacking Positions like tuples
     def __iter__(self):
         return iter((self.x, self.y))
 
@@ -38,7 +38,7 @@ class Game(arcade.Window):
         # to tell if a key was just pressed or is being held down (so that actions don't repeat too much)
         self.last_keys = set()
 
-        # Some actions we do want to repeat, but with a reasonable, FPS-independant delay,
+        # Some actions we do want to repeat, but with a reasonable, FPS-independent delay,
         # instead of every frame. This dictionary maps held keys to the time left (in seconds) before they activate again.
         self.repeat_delays = {}
 
@@ -120,17 +120,17 @@ class Game(arcade.Window):
         # This is the "Ghost Piece", the "shadow" of the falling piece that shows you where it will land,
         # to achieve this I simply added a field to the Piece class (is_ghost_piece) to handle this functionality
         self.ghost_piece = Piece(self.falling_piece.tetromino,       # Use the falling pieces Tetromino, since Tetrominoes don't change it's safe to use the direct reference
-                                 self.falling_piece.position.copy(), # use copy() for the Position as using a reference to the position would not allow the ghost piece to have a seperate position.
-                                 is_ghost_piece=True)                # set the stupid little field
+                                 self.falling_piece.position.copy(), # use copy() for the Position as using a reference to the position would not allow the ghost piece to have a separate position.
+                                 is_ghost_piece=True)
 
-        # Do the inital dropping of the ghost piece (moving it down until it hits the floor)
+        # Do the initial dropping of the ghost piece (moving it down until it hits the floor)
         # Notice the place=False argument, we don't want the ghost piece actually being added to the board..
         self.ghost_piece.drop(self.board, place=False)
 
     # This is the main update method, this is where the game logic happens,
     # Arcade will call this method for us more than 60 times a second.
     # "time_delta" is the amount of time in seconds since the previous frame (very important for any kind of timing)
-    def update(self, time_delta):
+    def on_update(self, time_delta):
         if self.game_over:
             return
         
@@ -233,16 +233,18 @@ class Game(arcade.Window):
         self.last_keys = self.keys.copy()
 
     def on_draw(self):
-        arcade.start_render()
+        self.clear()
 
         if self.game_over:
-            arcade.draw_text('Game Over',
-                             self.window_width // 2,
-                             self.window_height // 2,
-                             arcade.color.WHITE,
-                             35,
-                             anchor_x='center',
-                             anchor_y='center')
+            arcade.draw_text(
+                "Game Over",
+                self.window_width // 2,
+                self.window_height // 2,
+                arcade.color.WHITE,
+                35,
+                anchor_x="center",
+                anchor_y="center",
+            )
             return
             
         self.board.draw(self)
@@ -261,10 +263,25 @@ class Game(arcade.Window):
                 pos_x = x * cell_width
                 pos_y = y * cell_height
                 
-                # Draw the rectangle outline at the top-left corner
-                arcade.draw_rectangle_outline(pos_x + cell_width / 2, pos_y + cell_height / 2, 
-                                            cell_width, cell_height, arcade.color.BLACK, 5)
+                # Draw the rectangle outline
+                arcade.draw_rect_outline(
+                    arcade.Rect(
+                        left=x * cell_width,
+                        right=(x + 1) * cell_width,
+                        bottom=y * cell_height,
+                        top=(y + 1) * cell_height,
+                        width=cell_width,
+                        height=cell_height,
+                        x=x,
+                        y=y,
+                    ),
+                    arcade.color.BLACK,
+                    5,
+                )
+
+                # Draw the circle at the center
                 arcade.draw_circle_filled(pos_x, pos_y, 5, arcade.color.BLACK)
+
 
     def draw_cells(self, cells, position=Position(0, 0), color=None, draw_background=False):
         """ Draws a 2D list of cells onto the screen, this method is used to draw both the pieces and the board. """
@@ -287,7 +304,14 @@ class Game(arcade.Window):
                     continue
 
                 # Draw the rectangle for this cell
-                arcade.draw_rectangle_filled(center_x, center_y, cell_width, cell_height, draw_color)
+                arcade.draw_rect_filled(arcade.Rect(left=center_x - cell_width / 2, 
+                                           right=center_x + cell_width / 2, 
+                                           bottom=center_y - cell_height / 2, 
+                                           top=center_y + cell_height / 2, 
+                                           width=cell_width, 
+                                           height=cell_height, 
+                                           x=center_x, 
+                                           y=center_y), draw_color)
     
     # Arcade will call these handler functions when there is a key event
     def on_key_press(self, key, modifiers):
@@ -299,7 +323,7 @@ class Game(arcade.Window):
     def on_resize(self, width, height):
         self.window_width = width
         self.window_height = height
-        arcade.set_viewport(0, width, 0, height)
+        super().on_resize(width, height)
 
     def spawn_piece(self) -> Piece:
         """ Creates a new random piece at the top of the board and returns it """
@@ -469,7 +493,7 @@ class Piece:
         origin = self.tetromino.get_origin(self.rotation)
         
         if self.is_ghost_piece:
-            color = (19, 19, 40) # Hardcode a color for the ghost piece
+            color = (19, 19, 40) # Hard-code a color for the ghost piece
         else:
             color = self.tetromino.color
 
