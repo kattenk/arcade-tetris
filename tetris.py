@@ -1,8 +1,12 @@
-import arcade, time, random
-from typing import List, Tuple
+import arcade
+import random
 from enum import Enum
 
 class Position:
+    """Position (x, y) on the board.
+
+    Also used for relative positions and Direction.
+    """
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -26,7 +30,7 @@ class Position:
 
 
 class Direction(Enum):
-    """ Describes a direction in a bottom-left coordinate system """
+    """Direction in a bottom-left coordinate system."""
     UP = Position(0, 1)
     RIGHT = Position(1, 0)
     DOWN = Position(0, -1)
@@ -47,16 +51,14 @@ class Direction(Enum):
 
 
 class Tetromino:
-    """
-    This class basically just defines Tetromino as a grouping of a shape and a color,
-    while also providing a method to retrieve rotations of the shape.
+    """Tetromino with shape and color.
+
+    Also handles origin and rotations.
     """
 
     def __init__(self, shape, color):
-        self.shape: list(list(str)) = shape
-
-        # I tried to use proper type annotations here? :P
-        self.color: Tuple[int, int, int] = color
+        self.shape: list[list[str]] = shape
+        self.color: tuple[int, int, int] = color
 
     def get_origin(self, rotation: Direction = Direction.UP) -> Position:
         for y, row in enumerate(self.rotate(rotation)[::-1]):
@@ -82,8 +84,6 @@ class Tetromino:
 
             return transposed
 
-        transposed_shape = transpose(self.shape)
-
         if rotation is Direction.UP:
             return self.shape
 
@@ -101,9 +101,45 @@ class Tetromino:
             transposed_shape = transpose(self.shape)
             return transposed_shape[::-1]
 
+    @staticmethod
+    def get_all():
+        I = Tetromino([['T'],
+                       ['O'],
+                       ['T'],
+                       ['T']],
+                      color=(0, 209, 146))
+
+        J = Tetromino([['_', 'T'],
+                       ['_', 'O'],
+                       ['T', 'T']],
+                      color=(48, 105, 152))
+
+        L = Tetromino([['T', '_'],
+                       ['O', '_'],
+                       ['T', 'T']],
+                      color=(208, 112, 56))
+
+        O = Tetromino([['T', 'T'],
+                       ['T', 'T']],
+                      color=(221, 225, 0))
+
+        S = Tetromino([['_', 'O', 'T'],
+                       ['T', 'T', '_']],
+                      color=(123, 209, 46))
+
+        T = Tetromino([['T', 'O', 'T'],
+                       ['_', 'T', '_']],
+                      color=(186, 0, 166))
+
+        Z = Tetromino([['T', 'T', '_'],
+                       ['_', 'O', 'T']],
+                      color=(202, 7, 67))
+
+        return I, J, L, O, S, T, Z
+
 
 class Piece:
-    """ The Piece class represents a piece before it is placed on the board """
+    """A piece before it is placed on the board."""
 
     def __init__(self, tetromino, position, rotation=Direction.UP, is_ghost_piece=False):
         self.tetromino = tetromino
@@ -134,7 +170,7 @@ class Piece:
             for x, cell in enumerate(row):
                 # Check for any filled cell (not empty)
                 if cell != '_':
-                    x_pos, y_pos = self.position.subtract(self.tetromino.get_origin(self.rotation)).add(Position(x, y))
+                    x_pos, y_pos = self.position.subtract(origin).add(Position(x, y))
 
                     # Check if the position is out of bounds
                     if not board.is_within_bounds(x_pos, y_pos):
@@ -149,21 +185,19 @@ class Piece:
 
     def place(self, board):
         """ Inserts the piece into the given board """
-
         rotated_shape = self.tetromino.rotate(self.rotation)
         origin = self.tetromino.get_origin(self.rotation)
 
         for y, row in enumerate(rotated_shape[::-1]):
             for x, cell in enumerate(row):
                 if cell != '_':
-                    x_pos, y_pos = self.position.subtract(self.tetromino.get_origin(self.rotation)).add(Position(x, y))
+                    x_pos, y_pos = self.position.subtract(origin).add(Position(x, y))
                     board.cells[y_pos][x_pos] = self.tetromino.color  # Assign the color of the tetromino
 
         game.clear_rows()
 
     def fall(self, game):
         """ Moves the piece down 1, if it touches something it will automatically place itself into the board """
-
         self.position.move(Direction.DOWN.value)
 
         if self.is_colliding(game.board):
@@ -176,7 +210,6 @@ class Piece:
 
     def drop(self, board, place=True):
         """ Drops the piece until it hits something, then optionally places it """
-
         # Move the piece down until it collides with something
         while not self.is_colliding(board):
             self.position.move(Direction.DOWN.value)
@@ -190,6 +223,7 @@ class Piece:
 
 
 class Board:
+    """Tetris board representation."""
     def __init__(self, width, height):
         self.width = width
         self.height = height
@@ -222,6 +256,7 @@ class Board:
 
 
 class Game(arcade.Window):
+    """Main Arcade Tetris game class."""
     def __init__(self):
         super().__init__(width=400, height=600, title='Simple Tetris', antialiasing=False, resizable=True)
 
@@ -268,45 +303,6 @@ class Game(arcade.Window):
 
         # Is the game over yet...
         self.game_over = False
-
-        # Here we define each Tetromino using 2-dimensional lists of characters,
-        # _ = Empty space
-        # T = Filled cell
-        # O = Origin point (This is used later for producing the rotated versions of tetrominoes)
-
-        I = Tetromino([['T'],
-                       ['O'],
-                       ['T'],
-                       ['T']],
-                      color=(0, 209, 146))
-
-        J = Tetromino([['_', 'T'],
-                       ['_', 'O'],
-                       ['T', 'T']],
-                      color=(48, 105, 152))
-
-        L = Tetromino([['T', '_'],
-                       ['O', '_'],
-                       ['T', 'T']],
-                      color=(208, 112, 56))
-
-        O = Tetromino([['T', 'T'],
-                       ['T', 'T']],
-                      color=(221, 225, 0))
-
-        S = Tetromino([['_', 'O', 'T'],
-                       ['T', 'T', '_']],
-                      color=(123, 209, 46))
-
-        T = Tetromino([['T', 'O', 'T'],
-                       ['_', 'T', '_']],
-                      color=(186, 0, 166))
-
-        Z = Tetromino([['T', 'T', '_'],
-                       ['_', 'O', 'T']],
-                      color=(202, 7, 67))
-
-        self.tetrominoes = (I, J, L, O, S, T, Z)
 
         # Create the first piece
         self.falling_piece = self.spawn_piece()
@@ -434,8 +430,8 @@ class Game(arcade.Window):
         if self.game_over:
             arcade.draw_text(
                 "Game Over",
-                self.window_width // 2,
-                self.window_height // 2,
+                self.width // 2,
+                self.height // 2,
                 arcade.color.WHITE,
                 35,
                 anchor_x="center",
@@ -449,8 +445,8 @@ class Game(arcade.Window):
         self.draw_grid()
 
     def draw_grid(self):
-        cell_width = self.window_width / self.board.width
-        cell_height = self.window_height / self.board.height
+        cell_width = self.width / self.board.width
+        cell_height = self.height / self.board.height
 
         # Loop through each cell in the grid
         for y in range(self.board.height + 1):  # +1 for the bottom edge
@@ -480,8 +476,8 @@ class Game(arcade.Window):
 
     def draw_cells(self, cells, position=Position(0, 0), color=None, draw_background=False):
         """ Draws a 2D list of cells onto the screen, this method is used to draw both the pieces and the board. """
-        cell_width = self.window_width / self.board.width
-        cell_height = self.window_height / self.board.height
+        cell_width = self.width / self.board.width
+        cell_height = self.height / self.board.height
 
         for y, row in enumerate(cells):
             for x, cell in enumerate(row):
@@ -515,18 +511,12 @@ class Game(arcade.Window):
     def on_key_release(self, key, modifiers):
         self.keys.discard(key)
 
-    def on_resize(self, width, height):
-        self.window_width = width
-        self.window_height = height
-        super().on_resize(width, height)
-
     def spawn_piece(self) -> Piece:
         """ Creates a new random piece at the top of the board and returns it """
-        tetromino = random.choice(self.tetrominoes)
-
-        new_piece = Piece(tetromino,
-                          Position(self.board.width // 2,
-                                   self.board.height - (len(tetromino.shape) - tetromino.get_origin(Direction.UP).y)))
+        tetromino = random.choice(Tetromino.get_all())
+        x = self.board.width // 2
+        y = self.board.height - (len(tetromino.shape) - tetromino.get_origin(Direction.UP).y)
+        new_piece = Piece(tetromino, Position(x, y))
 
         if new_piece.is_colliding(self.board):
             self.game_over = True
@@ -566,7 +556,6 @@ class Game(arcade.Window):
 
     def update_caption(self):
         """ Updates the window title to reflect the current game stats """
-
         self.set_caption(f'Simple Tetris - Lines: {self.lines} Score: {self.score}')
 
 
