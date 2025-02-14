@@ -32,9 +32,12 @@ class Tetromino:
     """
 
     def __init__(self, shape, color):
-        # TODO: explain reverse
-        self.shape = [[color if x != '_' else x for x in row] for row in shape[::-1]]
+        self.shape = shape
         self.color = color
+
+    @staticmethod
+    def get_cells_with_color(cells, color):
+        return [[color if x != '_' else x for x in row] for row in cells]
 
     @staticmethod
     def get_all():
@@ -78,7 +81,7 @@ class Tetromino:
         return I, J, L, O, S, T, Z
 
     def get_origin(self, rotation: Direction = Direction.UP) -> Vec2:
-        for y, row in enumerate(self.rotate(rotation)):
+        for y, row in enumerate(self.rotate(rotation)[::-1]):
             for x, cell in enumerate(row):
                 if cell == 'O':
                     return Vec2(x, y)
@@ -135,7 +138,7 @@ class Piece:
         origin = self.tetromino.get_origin(self.rotation)
 
         # Check each cell of the rotated piece
-        for y, row in enumerate(rotated_shape):
+        for y, row in enumerate(rotated_shape[::-1]):
             for x, cell in enumerate(row):
                 # Check for any filled cell (not empty)
                 if cell != '_':
@@ -158,7 +161,7 @@ class Piece:
         rotated_shape = self.tetromino.rotate(self.rotation)
         origin = self.tetromino.get_origin(self.rotation)
 
-        for y, row in enumerate(rotated_shape):
+        for y, row in enumerate(rotated_shape[::-1]):
             for x, cell in enumerate(row):
                 if cell != '_':
                     x_pos, y_pos = self.position -origin + Vec2(x, y)
@@ -355,10 +358,7 @@ class GameView(arcade.View):
                     center = Vec2(((position.x + x) * (cell_size.x)) + cell_size.x / 2,
                                   ((position.y + y) * (cell_size.y)) + cell_size.y / 2)
 
-                    cell_sprite = arcade.Sprite("cell.png", 1, center.x, center.y)
-                    cell_sprite.width = cell_size.x - 5
-                    cell_sprite.height = cell_size.y - 5
-                    cell_sprite.color = cell
+                    cell_sprite = arcade.SpriteSolidColor(cell_size.x - 5, cell_size.y - 5, center.x, center.y, cell)
 
                     if cell == "O":
                         cell_sprite.color = arcade.color.ORANGE_PEEL
@@ -366,7 +366,7 @@ class GameView(arcade.View):
                     self.sprites.append(cell_sprite)
 
         def add_piece(piece):
-            add_cells(piece.tetromino.rotate(piece.rotation),
+            add_cells(Tetromino.get_cells_with_color(piece.tetromino.rotate(piece.rotation)[::-1], piece.tetromino.color),
                       piece.position - piece.tetromino.get_origin(piece.rotation))
 
         add_piece(self.falling_piece)
