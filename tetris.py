@@ -104,23 +104,12 @@ class Tetromino:
 
             return transposed
         
-        # TODO: use a dictionary for this stuff?
-        if rotation is Direction.UP:
-            return self.shape
-
-        if rotation is Direction.DOWN:
-            # Reverse the rows and then reverse each row (180 degrees)
-            return [row[::-1] for row in self.shape[::-1]]
-
-        if rotation is Direction.RIGHT:
-            # Reverse the rows first, then transpose for 90-degree clockwise rotation
-            reversed_shape = self.shape[::-1]
-            return transpose(reversed_shape)
-
-        if rotation is Direction.LEFT:
-            # Transpose and then reverse the rows for 90-degree counter-clockwise rotation
-            transposed_shape = transpose(self.shape)
-            return transposed_shape[::-1]
+        return {
+            Direction.UP: self.shape,
+            Direction.DOWN: [row[::-1] for row in self.shape[::-1]],
+            Direction.RIGHT: transpose(self.shape[::-1]),
+            Direction.LEFT: transpose(self.shape)[::-1]
+        }[rotation]
 
 class Piece:
     """A piece before it is placed on the board."""
