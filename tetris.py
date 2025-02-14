@@ -106,9 +106,9 @@ class Tetromino:
         
         return {
             Direction.UP: self.shape,
-            Direction.DOWN: [row[::-1] for row in self.shape[::-1]],
-            Direction.RIGHT: transpose(self.shape[::-1]),
-            Direction.LEFT: transpose(self.shape)[::-1]
+            Direction.DOWN: [row[::-1] for row in self.shape[::-1]], # Reverse the rows and then reverse each row (180 degrees)
+            Direction.RIGHT: transpose(self.shape[::-1]), # Reverse the rows first, then transpose for 90-degree clockwise rotation
+            Direction.LEFT: transpose(self.shape)[::-1] # Transpose and then reverse the rows for 90-degree counter-clockwise rotation
         }[rotation]
 
 class Piece:
