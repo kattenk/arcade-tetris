@@ -105,7 +105,7 @@ class Tetromino:
             return transposed
         
         return {
-            Direction.UP: self.shape,
+            Direction.UP: self.shape, # Return the shape as-is for UP
             Direction.DOWN: [row[::-1] for row in self.shape[::-1]], # Reverse the rows and then reverse each row (180 degrees)
             Direction.RIGHT: transpose(self.shape[::-1]), # Reverse the rows first, then transpose for 90-degree clockwise rotation
             Direction.LEFT: transpose(self.shape)[::-1] # Transpose and then reverse the rows for 90-degree counter-clockwise rotation
@@ -145,7 +145,7 @@ class Piece:
         return False
 
     def place(self, board):
-        """Inserts the piece into the given board."""
+        """Inserts the piece into the board."""
 
         rotated_shape = self.tetromino.rotate(self.rotation)
         origin = self.tetromino.get_origin(self.rotation)
@@ -177,7 +177,7 @@ class Board:
         return rows
     
     def is_within_bounds(self, x, y):
-        """Check if the coordinates (x, y) are within the bounds of the board."""
+        """Checks if the coordinates are within the bounds of the board."""
 
         return 0 <= x < len(self.cells[0]) and 0 <= y < len(self.cells)
 
@@ -189,17 +189,11 @@ class Board:
         self.cells.append(new_row) # Append the new row at the bottom
 
 class GameView(arcade.View):
+    # TODO: add docstrings
+
     def __init__(self):
         super().__init__()
 
-        self.keys = None
-        self.last_keys = None
-        self.board = None
-        self.falling_piece = None
-        self.ghost_piece = None
-        self.sprites = None
-
-    def setup(self):
         # This is the set of keys that are pressed this frame
         self.keys = set()
 
@@ -224,8 +218,8 @@ class GameView(arcade.View):
         self.falling_piece = self.spawn_piece()
 
         self.sprites = arcade.SpriteList()
-        self.update_sprite_list()
-
+        self.update_sprites()
+    
     def on_key_press(self, key, modifiers):
         self.keys.add(key)
 
@@ -299,14 +293,15 @@ class GameView(arcade.View):
 
         # Map keys to actions, so the player can call them with their keyboard!
         key_actions = {
-            arcade.key.UP: (self.rotate, Direction.RIGHT, None),
-            arcade.key.DOWN: (self.rotate, Direction.LEFT, None),
-            arcade.key.LEFT: (self.move, Direction.LEFT, 0.13),
-            arcade.key.RIGHT: (self.move, Direction.RIGHT, 0.13),
-            arcade.key.SPACE: (self.drop, None, None)
+            #                  Method       Direction        Repeat delay
+            arcade.key.UP:    (self.rotate, Direction.RIGHT, None),
+            arcade.key.DOWN:  (self.rotate, Direction.LEFT,  None),
+            arcade.key.LEFT:  (self.move,   Direction.LEFT,  0.13),
+            arcade.key.RIGHT: (self.move,   Direction.RIGHT, 0.13),
+            arcade.key.SPACE: (self.drop,   None,            None)
         }
 
-        # Loop over all the actions we have in the game
+        # Loop over all the actions in the game
         for key, (action, direction, repeat_after) in key_actions.items():
             # Retrieve the active delay for this key, defaulting to 0
             delay = self.repeat_delays.get(key, 0)
@@ -323,7 +318,9 @@ class GameView(arcade.View):
                 if key not in self.last_keys or (repeat_after is not None and delay <= 0):
                     action(direction)
                     
-                    self.update_sprite_list()
+                    # Update the sprite list after every action,
+                    # to show changes on screen
+                    self.update_sprites()
 
                     self.repeat_delays[key] = repeat_after # Reset the delay
                 else:
@@ -333,7 +330,12 @@ class GameView(arcade.View):
         # Store the pressed keys on this frame for the next frame to compare to
         self.last_keys = self.keys.copy()
     
-    def update_sprite_list(self):
+    def update_sprites(self):
+        """
+        This method is called every time the player acts or gravity is applied,
+        it regenerates the SpriteList (self.sprites) from scratch each time,
+        to reflect the new state of the game.
+        """
         self.sprites.clear()
 
         def add_cells(cells, position, add_background=False):
@@ -352,8 +354,10 @@ class GameView(arcade.View):
 
                     center = Vec2(((position.x + x) * (cell_size.x)) + cell_size.x / 2,
                                   ((position.y + y) * (cell_size.y)) + cell_size.y / 2)
+                    
+                    grid_width = cell_size.x // 7
 
-                    cell_sprite = arcade.SpriteSolidColor(cell_size.x - 5, cell_size.y - 5, center.x, center.y, color)
+                    cell_sprite = arcade.SpriteSolidColor(cell_size.x - grid_width, cell_size.y - grid_width, center.x, center.y, color)
 
                     self.sprites.append(cell_sprite)
 
@@ -387,9 +391,9 @@ class GameView(arcade.View):
     
     def create_ghost_piece(self) -> Piece:
         ghost_piece = Piece(tetromino=self.falling_piece.tetromino,
-                                 position=Vec2(self.falling_piece.position.x, self.falling_piece.position.y),
-                                 rotation=self.falling_piece.rotation,
-                                 is_ghost_piece=True)
+                            position=Vec2(self.falling_piece.position.x, self.falling_piece.position.y),
+                            rotation=self.falling_piece.rotation,
+                            is_ghost_piece=True)
         
         while not ghost_piece.is_colliding(self.board):
             ghost_piece.position += Direction.DOWN.value
@@ -410,7 +414,7 @@ class GameView(arcade.View):
                 self.falling_piece.place(self.board)
                 self.falling_piece = self.spawn_piece()
             
-            self.update_sprite_list()
+            self.update_sprites()
 
             self.last_gravity_application = self.gravity_clock.tick_count
 
@@ -420,7 +424,5 @@ class GameView(arcade.View):
 # It's entirely useless in this case, but I thought I'd leave it in.
 if __name__ == "__main__":
     window = arcade.Window(400, 600, "Simple Tetris", resizable=True)
-    start_view = GameView()
-    window.show_view(start_view)
-    start_view.setup()
+    window.show_view(GameView())
     arcade.run()
