@@ -196,6 +196,7 @@ class GameView(arcade.View):
         self.last_keys = None
         self.board = None
         self.falling_piece = None
+        self.ghost_piece = None
         self.sprites = None
 
     def setup(self):
@@ -335,32 +336,39 @@ class GameView(arcade.View):
     def update_sprite_list(self):
         self.sprites.clear()
 
-        def add_cells(cells, position):
+        def add_cells(cells, position, add_background=False):
             cell_size = Vec2(self.width // self.board.width,
                              self.height // self.board.height)
             
             for y, row in enumerate(cells):
                 for x, cell in enumerate(row):
                     if cell == "_":
-                        continue
+                        if not add_background:
+                            continue
+                        else:
+                            color = (8, 6, 27)
+                    else:
+                        color = cell
 
                     center = Vec2(((position.x + x) * (cell_size.x)) + cell_size.x / 2,
                                   ((position.y + y) * (cell_size.y)) + cell_size.y / 2)
 
-                    cell_sprite = arcade.SpriteSolidColor(cell_size.x - 5, cell_size.y - 5, center.x, center.y, cell)
-
-                    if cell == "O":
-                        cell_sprite.color = arcade.color.ORANGE_PEEL
+                    cell_sprite = arcade.SpriteSolidColor(cell_size.x - 5, cell_size.y - 5, center.x, center.y, color)
 
                     self.sprites.append(cell_sprite)
 
         def add_piece(piece):
-            add_cells(Tetromino.get_cells_with_color(piece.tetromino.rotate(piece.rotation)[::-1], piece.tetromino.color),
+            if not piece.is_ghost_piece:
+                color = piece.tetromino.color
+            else:
+                color = (18, 18, 39)
+
+            add_cells(Tetromino.get_cells_with_color(piece.tetromino.rotate(piece.rotation)[::-1], color),
                       piece.position - piece.tetromino.get_origin(piece.rotation))
 
+        add_cells(self.board.cells, Vec2(0, 0), add_background=True)
+        add_piece(self.create_ghost_piece())
         add_piece(self.falling_piece)
-
-        add_cells(self.board.cells, Vec2(0, 0))
     
     def on_draw(self):
         # Clear the screen
@@ -375,11 +383,20 @@ class GameView(arcade.View):
         new_piece = Piece(tetromino, Vec2(x=self.board.width // 2,
                                           y=self.board.height - (len(tetromino.shape) - tetromino.get_origin(Direction.UP).y)))
 
-        # if new_piece.is_colliding(self.board):
-        #     self.game_over = True
-
-        # Return the piece regardless of weather the game is over or not to prevent errors
         return new_piece
+    
+    def create_ghost_piece(self) -> Piece:
+        ghost_piece = Piece(tetromino=self.falling_piece.tetromino,
+                                 position=Vec2(self.falling_piece.position.x, self.falling_piece.position.y),
+                                 rotation=self.falling_piece.rotation,
+                                 is_ghost_piece=True)
+        
+        while not ghost_piece.is_colliding(self.board):
+            ghost_piece.position += Direction.DOWN.value
+        
+        ghost_piece.position += Direction.UP.value
+
+        return ghost_piece
     
     def handle_gravity(self, delta_time):
         self.gravity_clock.tick(delta_time)
@@ -396,19 +413,14 @@ class GameView(arcade.View):
             self.update_sprite_list()
 
             self.last_gravity_application = self.gravity_clock.tick_count
-    
-def main():
-    """ Main function """
-
-    window = arcade.Window(400, 600, "Simple Tetris")
-    start_view = GameView()
-    window.show_view(start_view)
-    start_view.setup()
-    arcade.run()
 
 # You could put this code outside of the "if __name__ == "__main__"" block
 # but this theoretically allows you to load this file without starting the game
 # allowing for other modules to use classes from this, etc.
 # It's entirely useless in this case, but I thought I'd leave it in.
 if __name__ == "__main__":
-    main()
+    window = arcade.Window(400, 600, "Simple Tetris", resizable=True)
+    start_view = GameView()
+    window.show_view(start_view)
+    start_view.setup()
+    arcade.run()
