@@ -139,7 +139,7 @@ class Piece:
                         return True
 
                     # Check if the cell on the board is occupied
-                    if board.cells[y_pos][x_pos] != '_':
+                    if board.cells[y_pos][x_pos] != None:
                         return True
 
         # Piece does not collide with anything on the board
@@ -165,7 +165,7 @@ class Board:
     def __init__(self, width, height):
         self.width = width
         self.height = height
-        self.cells = [['_'] * width for _ in range(height)]
+        self.cells = [[None] * width for _ in range(height)]
     
     def get_clearable_rows(self):
         """Returns a list of row indices that are ready to be cleared."""
@@ -184,7 +184,7 @@ class Board:
 
     def clear_row(self, row):
         self.cells.pop(row) # Remove the specified row
-        new_row = ['_'] * len(self.cells[0]) # Create a new row filled with '_'
+        new_row = [None] * len(self.cells[0]) # Create a new row filled with None
 
         # TODO: clarify the bottom = the top
         self.cells.append(new_row) # Append the new row at the bottom
@@ -210,8 +210,26 @@ class GameView(arcade.View):
         self.board = Board(width=10, height=20)
 
         self.falling_piece = self.spawn_piece()
-        self.sprites = arcade.SpriteList()
-        self.update_sprites()
+        self.sprites = [[None for x in range(self.board.height)] for row in range(self.board.width)]
+        self.sprite_list = arcade.SpriteList()
+
+        cell_size = Vec2(self.width // self.board.width,
+                         self.height // self.board.height)
+
+        for y in range(self.board.height):
+            for x in range(self.board.width):
+                color = (8, 6, 27)
+
+                center = Vec2(((x) * (cell_size.x)) + cell_size.x / 2,
+                              ((y) * (cell_size.y)) + cell_size.y / 2)
+                
+                gap_width = cell_size.x // 7 # Make the gaps proportional to the cell-size
+
+                # Arcade can generate a sprite that's just a solid color for us -- without needing to load a file
+                cell_sprite = arcade.SpriteSolidColor(cell_size.x - gap_width, cell_size.y - gap_width, center.x, center.y, color)
+
+                self.sprites[x][y] = cell_sprite
+                self.sprite_list.append(cell_sprite)
     
     def on_key_press(self, key, modifiers):
         self.keys.add(key)
@@ -324,38 +342,22 @@ class GameView(arcade.View):
         self.last_keys = self.keys.copy()
     
     def update_sprites(self):
-        # TODO: Rewrite to use same sprites everytime instead of new ones
         """
-        This method is called every time the player acts or gravity is applied,
-        it regenerates the SpriteList (self.sprites) from scratch each time,
-        to reflect the new state of the game.
+        This method is called every time the player acts or gravity is applied.
         """
-        self.sprites.clear()
 
-        def add_cells(cells, position, add_background=False):
-            # self.width and self.height are the window's dimensions in pixels
-            cell_size = Vec2(self.width // self.board.width,
-                             self.height // self.board.height)
-            
+        def add_cells(cells, position):
             for y, row in enumerate(cells):
                 for x, cell in enumerate(row):
                     if cell == "_":
-                        if not add_background:
-                            continue
-                        else:
-                            color = (8, 6, 27)
+                        continue
+                    
+                    if cell == None:
+                        color = (8, 6, 27)
                     else:
                         color = cell
-
-                    center = Vec2(((position.x + x) * (cell_size.x)) + cell_size.x / 2,
-                                  ((position.y + y) * (cell_size.y)) + cell_size.y / 2)
                     
-                    gap_width = cell_size.x // 7 # Make the gaps proportional to the cell-size
-
-                    # Arcade can generate a sprite that's just a solid color for us -- without needing to load a file
-                    cell_sprite = arcade.SpriteSolidColor(cell_size.x - gap_width, cell_size.y - gap_width, center.x, center.y, color)
-                    
-                    self.sprites.append(cell_sprite)
+                    self.sprites[x + position.x][y + position.y].color = color
 
         def add_piece(piece):
             if not piece.is_ghost_piece:
@@ -366,7 +368,7 @@ class GameView(arcade.View):
             add_cells(Tetromino.get_cells_with_color(piece.tetromino.rotate(piece.rotation)[::-1], color),
                       piece.position - piece.tetromino.get_origin(piece.rotation))
 
-        add_cells(self.board.cells, Vec2(0, 0), add_background=True)
+        add_cells(self.board.cells, Vec2(0, 0))
 
         add_piece(self.create_ghost_piece())
         add_piece(self.falling_piece)
@@ -374,7 +376,7 @@ class GameView(arcade.View):
     def on_draw(self):
         # Clear the screen
         self.clear()
-        self.sprites.draw(pixelated=True)
+        self.sprite_list.draw()
     
     def spawn_piece(self) -> Piece:
         """Creates a new random piece at the top of the board and returns it."""
@@ -410,10 +412,10 @@ class GameView(arcade.View):
 
                 self.falling_piece.place(self.board)
                 self.falling_piece = self.spawn_piece()
-            
-            self.update_sprites()
 
             self.last_gravity_application = self.gravity_clock.tick_count
+            
+            self.update_sprites()
     
     def handle_row_clearing(self):
         pass
