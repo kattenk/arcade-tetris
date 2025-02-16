@@ -37,6 +37,7 @@ class Tetromino:
 
     @staticmethod
     def get_cells_with_color(cells, color):
+        # TODO: Explain this
         return [[color if x != '_' else x for x in row] for row in cells]
 
     @staticmethod
@@ -105,10 +106,10 @@ class Tetromino:
             return transposed
         
         return {
-            Direction.UP: self.shape, # Return the shape as-is for UP
-            Direction.DOWN: [row[::-1] for row in self.shape[::-1]], # Reverse the rows and then reverse each row (180 degrees)
-            Direction.RIGHT: transpose(self.shape[::-1]), # Reverse the rows first, then transpose for 90-degree clockwise rotation
-            Direction.LEFT: transpose(self.shape)[::-1] # Transpose and then reverse the rows for 90-degree counter-clockwise rotation
+            Direction.UP:    self.shape,                              # Return the shape as-is for UP
+            Direction.DOWN:  [row[::-1] for row in self.shape[::-1]], # Reverse the rows and then reverse each row (180 degrees)
+            Direction.RIGHT: transpose(self.shape[::-1]),             # Reverse the rows first, then transpose for 90-degree clockwise rotation
+            Direction.LEFT:  transpose(self.shape)[::-1]              # Transpose and then reverse the rows for 90-degree counter-clockwise rotation
         }[rotation]
 
 class Piece:
@@ -194,12 +195,8 @@ class GameView(arcade.View):
     def __init__(self):
         super().__init__()
 
-        # This is the set of keys that are pressed this frame
-        self.keys = set()
-
-        # This is the set of keys that were pressed last frame, and it is used for comparison between the two,
-        # to tell if a key was just pressed or is being held down (so that actions don't repeat too much)
-        self.last_keys = set()
+        self.keys = set() # This is the set of keys that are pressed this frame
+        self.last_keys = set() # This is the set of keys that were pressed last frame
     
         # Some actions we do want to repeat, but with a reasonable, FPS-independent delay,
         # instead of every frame. This dictionary maps held keys to the time left (in seconds) before they activate again.
@@ -208,15 +205,11 @@ class GameView(arcade.View):
         self.gravity_clock = arcade.clock.Clock()
         self.last_gravity_application = 0
 
-        # TODO: verify this comment is correct
-        # Here is our board, it is mostly just a wrapper around a 2-dimensional list of characters.
-        # The falling piece and it's "Ghost Piece" (shadow) are the only instances of the Piece class in the game,
-        # once you place your piece it just gets added to the Board, this simplifies collision and clearing lines.
+        # Here is our board, it is mostly just a wrapper around a 2-dimensional list.
+        # the falling piece is not part of the board, until the player places it, etc.
         self.board = Board(width=10, height=20)
 
-        # The falling piece is the piece the player currently has control over, there is only one at a time
         self.falling_piece = self.spawn_piece()
-
         self.sprites = arcade.SpriteList()
         self.update_sprites()
     
@@ -291,13 +284,13 @@ class GameView(arcade.View):
     def on_update(self, delta_time):
         self.handle_gravity(delta_time)
 
-        # Map keys to actions, so the player can call them with their keyboard!
+        # Map keys to actions, so the player can call them with their keyboard
         key_actions = {
             #                  Method       Direction        Repeat delay
             arcade.key.UP:    (self.rotate, Direction.RIGHT, None),
             arcade.key.DOWN:  (self.rotate, Direction.LEFT,  None),
-            arcade.key.LEFT:  (self.move,   Direction.LEFT,  0.13),
-            arcade.key.RIGHT: (self.move,   Direction.RIGHT, 0.13),
+            arcade.key.LEFT:  (self.move,   Direction.LEFT,  0.12),
+            arcade.key.RIGHT: (self.move,   Direction.RIGHT, 0.12),
             arcade.key.SPACE: (self.drop,   None,            None)
         }
 
@@ -331,6 +324,7 @@ class GameView(arcade.View):
         self.last_keys = self.keys.copy()
     
     def update_sprites(self):
+        # TODO: Rewrite to use same sprites everytime instead of new ones
         """
         This method is called every time the player acts or gravity is applied,
         it regenerates the SpriteList (self.sprites) from scratch each time,
@@ -339,6 +333,7 @@ class GameView(arcade.View):
         self.sprites.clear()
 
         def add_cells(cells, position, add_background=False):
+            # self.width and self.height are the window's dimensions in pixels
             cell_size = Vec2(self.width // self.board.width,
                              self.height // self.board.height)
             
@@ -355,10 +350,11 @@ class GameView(arcade.View):
                     center = Vec2(((position.x + x) * (cell_size.x)) + cell_size.x / 2,
                                   ((position.y + y) * (cell_size.y)) + cell_size.y / 2)
                     
-                    grid_width = cell_size.x // 7
+                    gap_width = cell_size.x // 7 # Make the gaps proportional to the cell-size
 
-                    cell_sprite = arcade.SpriteSolidColor(cell_size.x - grid_width, cell_size.y - grid_width, center.x, center.y, color)
-
+                    # Arcade can generate a sprite that's just a solid color for us -- without needing to load a file
+                    cell_sprite = arcade.SpriteSolidColor(cell_size.x - gap_width, cell_size.y - gap_width, center.x, center.y, color)
+                    
                     self.sprites.append(cell_sprite)
 
         def add_piece(piece):
@@ -371,6 +367,7 @@ class GameView(arcade.View):
                       piece.position - piece.tetromino.get_origin(piece.rotation))
 
         add_cells(self.board.cells, Vec2(0, 0), add_background=True)
+
         add_piece(self.create_ghost_piece())
         add_piece(self.falling_piece)
     
@@ -417,12 +414,15 @@ class GameView(arcade.View):
             self.update_sprites()
 
             self.last_gravity_application = self.gravity_clock.tick_count
+    
+    def handle_row_clearing(self):
+        pass
 
 # You could put this code outside of the "if __name__ == "__main__"" block
 # but this theoretically allows you to load this file without starting the game
 # allowing for other modules to use classes from this, etc.
 # It's entirely useless in this case, but I thought I'd leave it in.
 if __name__ == "__main__":
-    window = arcade.Window(400, 600, "Simple Tetris", resizable=True)
+    window = arcade.Window(400, 600, "Simple Tetris")
     window.show_view(GameView())
     arcade.run()
