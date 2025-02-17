@@ -172,7 +172,7 @@ class Board:
 
         rows = []
         for y, row in enumerate(self.cells):
-            if '_' not in row:
+            if None not in row:
                 rows.append(y)
         
         return rows
@@ -230,6 +230,8 @@ class GameView(arcade.View):
 
                 self.sprites[x][y] = cell_sprite
                 self.sprite_list.append(cell_sprite)
+        
+        self.update_sprites()
     
     def on_key_press(self, key, modifiers):
         self.keys.add(key)
@@ -241,7 +243,7 @@ class GameView(arcade.View):
         # Apply the intended rotation for either direction
         self.falling_piece.rotation = self.falling_piece.rotation.rotate(clockwise=d is Direction.RIGHT)
 
-        # This code is my implementation of so-called "Wall Kicking",
+        # My implementation of so-called "Wall Kicking":
         # when a rotation causes a piece to intersect a wall, it needs to be "pushed" out of it behind the scenes..
         if self.falling_piece.is_colliding(self.board):
             # Define a helper function for moving a piece in a direction a number of times.
@@ -298,8 +300,13 @@ class GameView(arcade.View):
 
         # Spawn the next piece
         self.falling_piece = self.spawn_piece()
+
+        self.clear_rows()
     
     def on_update(self, delta_time):
+        if self.window.current_view is not self:
+            return
+        
         self.handle_gravity(delta_time)
 
         # Map keys to actions, so the player can call them with their keyboard
@@ -346,6 +353,9 @@ class GameView(arcade.View):
         This method is called every time the player acts or gravity is applied.
         """
 
+        if isinstance(self.window.current_view, GameOverView):
+            return
+
         def add_cells(cells, position):
             for y, row in enumerate(cells):
                 for x, cell in enumerate(row):
@@ -386,6 +396,9 @@ class GameView(arcade.View):
         new_piece = Piece(tetromino, Vec2(x=self.board.width // 2,
                                           y=self.board.height - (len(tetromino.shape) - tetromino.get_origin(Direction.UP).y)))
 
+        if new_piece.is_colliding(self.board):
+            self.window.show_view(GameOverView())
+
         return new_piece
     
     def create_ghost_piece(self) -> Piece:
@@ -414,13 +427,31 @@ class GameView(arcade.View):
                 self.falling_piece = self.spawn_piece()
 
             self.last_gravity_application = self.gravity_clock.tick_count
-            
-            self.update_sprites()
-    
-    def handle_row_clearing(self):
-        pass
 
-# You could put this code outside of the "if __name__ == "__main__"" block
+            self.update_sprites()
+            self.clear_rows()
+    
+    def clear_rows(self):
+        for row in sorted(self.board.get_clearable_rows(), reverse=True):
+            self.board.clear_row(row)
+
+class GameOverView(arcade.View):
+    def __init__(self):
+        super().__init__()
+
+        self.text = arcade.Text("Game Over", self.width // 2, self.height // 2, font_size=20, anchor_x="center")
+        self.timer = arcade.clock.Clock()
+
+    def on_draw(self):
+        self.text.draw()
+    
+    def on_update(self, delta_time):
+        self.timer.tick(delta_time)
+
+        if self.timer.time > 4:
+            self.window.show_view(GameView())
+
+# You could put this outside of the "if __name__ == "__main__"" block
 # but this theoretically allows you to load this file without starting the game
 # allowing for other modules to use classes from this, etc.
 # It's entirely useless in this case, but I thought I'd leave it in.
