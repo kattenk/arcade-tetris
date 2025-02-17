@@ -59,7 +59,7 @@ class Piece:
     
     @staticmethod
     def get_all_tetrominoes():
-        return I, J, L, O, S, T, Z
+        return Piece.I, Piece.J, Piece.L, Piece.O, Piece.S, Piece.T, Piece.Z
     
     def __init__(self, tetromino, position, rotation=Direction.UP):
         self.shape, self.color = tetromino
@@ -68,8 +68,7 @@ class Piece:
     
     def find_origin(self) -> Vec2:
         """
-        Attempts to locate the 'O' character within the shape,
-        ironically it will return None only for the "O" shape because it has no origin.
+        Attempts to locate the 'O' character within the shape, and return it's position
         """
 
         for x, row in enumerate(self.shape):
@@ -77,7 +76,7 @@ class Piece:
                 y = row.index("O")
                 return Vec2(x, y)
         
-        return None
+        return Vec2(0, 0)
     
     def get_rotated_shape(self):
         """Returns the pieces shape rotated according to it's current rotation."""
@@ -102,6 +101,10 @@ class Board:
         self.width, self.height = (width, height)
         self.window_width, self.window_height = (window_width, window_height)
         self.cells = [[None for _ in range(height)] for _ in range(width)]
+
+        self.pieces = []
+
+        # TODO: nice comment here
         self.sprites, self.sprite_list = self.create_sprites()
 
     def create_sprites(self):
@@ -133,10 +136,31 @@ class Board:
         
         return sprites, sprite_list
     
+    def update_sprites(self):
+        def add_cells(cells, position, color=None):
+            for y, row in enumerate(cells):
+                for x, cell in enumerate(row):
+                    if cell == "_":
+                        continue
+                    
+                    if cell == None:
+                        color = (8, 6, 27)
+                    else:
+                        if color == None:
+                            color = cell
+                        else:
+                            color = color
+                    
+                    self.sprites[x + position.x][y + position.y].color = color
+
+        for piece in self.pieces:
+            add_cells(piece.get_rotated_shape(), piece.position - piece.find_origin(), piece.color)
+    
     def is_within_bounds(self, piece):
         """True/False: is the piece within the bounds of the board?"""
 
-        shape_width, shape_height = (len(piece.shape[0]), len(piece.shape))
+        rotated_shape = piece.get_rotated_shape()
+        shape_width, shape_height = (len(rotated_shape[0]), len(rotated_shape))
 
         min_position = piece.position
 
@@ -154,7 +178,22 @@ class GameView(arcade.View):
     def __init__(self):
         super().__init__()
         self.board = Board(BOARD_WIDTH, BOARD_HEIGHT, self.width, self.height)
+
+        self.falling_piece = self.spawn_piece()
+        self.board.pieces.append(self.falling_piece)
+        self.board.update_sprites()
     
+    def spawn_piece(self) -> Piece:
+        """Creates a new piece at the top of the board and returns it."""
+        
+        tetromino = random.choice(Piece.get_all_tetrominoes())
+        new_piece = Piece(tetromino, Vec2(0, 0))
+
+        # Calculate the starting position at the top-center of the board
+        new_piece.position = Vec2(x=self.board.width // 2, y=self.board.height - len(tetromino[0]) - new_piece.find_origin().y)
+
+        return new_piece
+
     def on_draw(self):
         self.clear()
         self.board.sprite_list.draw()
