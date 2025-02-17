@@ -63,38 +63,40 @@ class Piece:
     
     def __init__(self, tetromino, position, rotation=Direction.UP):
         self.shape, self.color = tetromino
+        self.shape.reverse()
         self.position = position
         self.rotation = rotation
     
+    # TODO: update_origin instead and proper rotation system
     def find_origin(self) -> Vec2:
         """
         Attempts to locate the 'O' character within the shape, and return it's position
         """
 
-        for x, row in enumerate(self.shape):
+        for y, row in enumerate(self.shape):
             if "O" in row:
-                y = row.index("O")
+                x = row.index("O")
                 return Vec2(x, y)
         
         return Vec2(0, 0)
     
-    def get_rotated_shape(self):
-        """Returns the pieces shape rotated according to it's current rotation."""
+    # def get_rotated_shape(self):
+    #     """Returns the pieces shape rotated according to it's current rotation."""
 
-        def transpose(shape):
-            """
-            Transposes a shape, this has the effect of turning the shape on it's side:
-            columns become rows, rows become columns.
-            """
+    #     def transpose(shape):
+    #         """
+    #         Transposes a shape, this has the effect of turning the shape on it's side:
+    #         columns become rows, rows become columns.
+    #         """
 
-            return [list(row) for row in zip(*shape)]
+    #         return [list(row) for row in zip(*shape)]
 
-        return {
-            Direction.UP:    self.shape,                              # Return the shape as-is for UP
-            Direction.DOWN:  [row[::-1] for row in self.shape[::-1]], # Reverse the rows and then reverse each row (180 degrees)
-            Direction.RIGHT: transpose(self.shape[::-1]),             # Reverse the rows first, then transpose for 90-degree clockwise rotation
-            Direction.LEFT:  transpose(self.shape)[::-1]              # Transpose and then reverse the rows for 90-degree counter-clockwise rotation
-        }[self.rotation]
+    #     return {
+    #         Direction.UP:    self.shape,                              # Return the shape as-is for UP
+    #         Direction.DOWN:  [row[::-1] for row in self.shape[::-1]], # Reverse the rows and then reverse each row (180 degrees)
+    #         Direction.RIGHT: transpose(self.shape[::-1]),             # Reverse the rows first, then transpose for 90-degree clockwise rotation
+    #         Direction.LEFT:  transpose(self.shape)[::-1]              # Transpose and then reverse the rows for 90-degree counter-clockwise rotation
+    #     }[self.rotation]
 
 class Board:
     def __init__(self, width, height, window_width, window_height):
@@ -154,7 +156,7 @@ class Board:
                     self.sprites[x + position.x][y + position.y].color = color
 
         for piece in self.pieces:
-            add_cells(piece.get_rotated_shape(), piece.position - piece.find_origin(), piece.color)
+            add_cells(piece.shape, piece.position - Vec2(piece.find_origin().x, 0) + Vec2(0, piece.find_origin().y), piece.color)
     
     def is_within_bounds(self, piece):
         """True/False: is the piece within the bounds of the board?"""
