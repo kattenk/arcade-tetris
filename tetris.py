@@ -4,6 +4,12 @@ from pyglet.math import Vec2
 BOARD_WIDTH = 10
 BOARD_HEIGHT = 20
 
+# In the Tetris community, "Repeat Delay" is referred to as "DAS" (Delayed Auto-Shift)
+# and "Repeat Rate" is called "ARR" (Auto Repeat Rate). I attempted to give them more descriptive names
+# for this demo. you can read more about it here: https://tetris.wiki/DAS
+REPEAT_DELAY = 0.5
+REPEAT_RATE = 0.2
+
 class Direction(enum.Enum):
     """
     Direction in coordinate system where the origin is in the
@@ -58,8 +64,12 @@ class Piece:
         return Piece.I, Piece.J, Piece.L, Piece.O, Piece.S, Piece.T, Piece.Z
     
     def __init__(self, tetromino, position, rotation=Direction.UP):
+        # Each tetromino is a tuple of shape and color
         self.shape, self.color = tetromino
+
+        # We reverse the row order of the shape because Arcade uses a coordinate system where positive Y is up
         self.shape.reverse()
+
         self.origin: Vec2 = None
         self.update_origin()
         self.position = position
@@ -136,7 +146,6 @@ class Board:
                     self.sprites[x + position.x][y + position.y].color = color_to_use
 
         for piece in self.pieces:
-            print(f"{piece.origin = }")
             add_cells(piece.shape, piece.position - piece.origin, piece.color)
     
     def is_within_bounds(self, piece):
@@ -158,8 +167,37 @@ class GameView(arcade.View):
     def __init__(self):
         super().__init__()
 
+        # Spawn the first piece
         self.falling_piece = self.spawn_piece()
-        self.board = Board(BOARD_WIDTH, BOARD_HEIGHT, self.width, self.height, pieces=[self.falling_piece])
+
+        # Initialize the board, which will also handle drawing our falling piece
+        self.board = Board(BOARD_WIDTH, BOARD_HEIGHT, self.width, self.height,
+                           pieces=[self.falling_piece])
+
+        # Define the game controls
+        controls = {
+            #                 Method        Argument         Should Repeat
+            arcade.key.UP:    (self.rotate, Direction.RIGHT, False),
+            arcade.key.DOWN:  (self.rotate, Direction.LEFT,  False),
+            arcade.key.LEFT:  (self.move,   Direction.LEFT,  True),
+            arcade.key.RIGHT: (self.move,   Direction.RIGHT, True),
+            arcade.key.SPACE: (self.drop,   None,            False)
+        }
+
+        # Initialize the input system with the controls
+        self.input = Input(REPEAT_DELAY, REPEAT_RATE, controls)
+        self.on_key_press = self.input.on_key_press
+        self.on_key_release = self.input.on_key_release
+    
+    def rotate(self, d: Direction):
+        pass
+    
+    def move(self, d: Direction):
+        print(f"MOVE {d = }")
+        pass
+    
+    def drop(self):
+        pass
     
     def spawn_piece(self) -> Piece:
         """Creates a new piece at the top of the board and returns it."""
@@ -170,13 +208,52 @@ class GameView(arcade.View):
         # Calculate the starting position at the top-center of the board
         new_piece.position = Vec2(x=BOARD_WIDTH // 2, y=BOARD_HEIGHT - len(tetromino[0]) + new_piece.origin.y)
 
-        print(f"{new_piece.position = }")
-
         return new_piece
+    
+    def on_update(self, delta_time):
+        self.input.process_input(delta_time)
 
     def on_draw(self):
         self.clear()
         self.board.sprite_list.draw()
+
+class Input:
+    def __init__(self, repeat_delay, repeat_rate, controls):
+        self.repeat_delay = repeat_delay
+        self.repeat_rate = repeat_rate
+        self.controls = controls
+
+        self.keys = set()
+        self.last_keys = set()
+        self.repeat_delay_timer = 0
+        self.repeat_rate_timer = 0
+    
+    def process_input(self, delta_time):
+        self.last_keys = self.keys.copy()
+
+        for key in self.keys:
+            if key in self.controls.keys():
+                if self.repeat_delay_timer <= 0:
+                    method, argument, should_repeat = self.controls[key]
+
+                    if self.repeat_rate_timer <= 0:
+                        if argument:
+                            method(argument)
+                        else:
+                            method()
+                        
+                        self.repeat_rate_timer = self.repeat_rate
+
+        self.repeat_delay_timer -= delta_time
+        self.repeat_rate_timer -= delta_time
+    
+    def on_key_press(self, key, modifiers):
+        self.keys.add(key)
+        self.repeat_delay_timer = self.repeat_delay
+    
+    def on_key_release(self, key, modifiers):
+        self.keys.discard(key)
+        self.repeat_delay_timer = 0
 
 # You could put this outside of the "if __name__ == "__main__"" block
 # but this theoretically allows you to load this file without starting the game
