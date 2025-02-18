@@ -7,8 +7,8 @@ BOARD_HEIGHT = 20
 # In the Tetris community, "Repeat Delay" is referred to as "DAS" (Delayed Auto-Shift)
 # and "Repeat Rate" is called "ARR" (Auto Repeat Rate). I attempted to give them more descriptive names
 # for this demo. you can read more about it here: https://tetris.wiki/DAS
-REPEAT_DELAY = 0.5
-REPEAT_RATE = 0.2
+REPEAT_DELAY = 0.167
+REPEAT_RATE = 0.033
 
 class Direction(enum.Enum):
     """
@@ -92,7 +92,7 @@ class Board:
     def __init__(self, width, height, window_width, window_height, pieces=[]):
         self.width, self.height = (width, height)
         self.window_width, self.window_height = (window_width, window_height)
-        self.cells = [["_" for _ in range(height)] for _ in range(width)]
+        self.cells = [["_"] * width for _ in range(height)]
 
         self.pieces = pieces
 
@@ -145,14 +145,15 @@ class Board:
 
                     self.sprites[x + position.x][y + position.y].color = color_to_use
 
+        add_cells(self.cells, Vec2(0, 0))
+
         for piece in self.pieces:
             add_cells(piece.shape, piece.position - piece.origin, piece.color)
     
     def is_within_bounds(self, piece):
         """True/False: is the piece within the bounds of the board?"""
 
-        rotated_shape = piece.get_rotated_shape()
-        shape_width, shape_height = (len(rotated_shape[0]), len(rotated_shape))
+        shape_width, shape_height = (len(piece.shape[0]), len(piece.shape))
 
         min_position = piece.position - piece.origin
 
@@ -193,8 +194,12 @@ class GameView(arcade.View):
         pass
     
     def move(self, d: Direction):
-        print(f"MOVE {d = }")
-        pass
+        self.falling_piece.position += d.value
+
+        if not self.board.is_within_bounds(self.falling_piece):
+            self.falling_piece.position -= d.value
+        else:
+            self.board.update_sprites()
     
     def drop(self):
         pass
@@ -229,14 +234,12 @@ class Input:
         self.repeat_rate_timer = 0
     
     def process_input(self, delta_time):
-        self.last_keys = self.keys.copy()
-
         for key in self.keys:
             if key in self.controls.keys():
-                if self.repeat_delay_timer <= 0:
-                    method, argument, should_repeat = self.controls[key]
-
+                if self.repeat_delay_timer <= 0 or key not in self.last_keys:
                     if self.repeat_rate_timer <= 0:
+                        method, argument, should_repeat = self.controls[key]
+
                         if argument:
                             method(argument)
                         else:
@@ -246,20 +249,23 @@ class Input:
 
         self.repeat_delay_timer -= delta_time
         self.repeat_rate_timer -= delta_time
+        self.last_keys = self.keys.copy()
     
     def on_key_press(self, key, modifiers):
         self.keys.add(key)
         self.repeat_delay_timer = self.repeat_delay
+        self.repeat_rate_timer = 0
     
     def on_key_release(self, key, modifiers):
         self.keys.discard(key)
         self.repeat_delay_timer = 0
+        self.repeat_rate_timer = 0
 
 # You could put this outside of the "if __name__ == "__main__"" block
 # but this theoretically allows you to load this file without starting the game
 # allowing for other modules to use classes from this, etc.
 # It's entirely useless in this case, but I thought I'd leave it in.
 if __name__ == "__main__":
-    window = arcade.Window(400, 600, "Simple Tetris")
+    window = arcade.Window(400, 600, "Tetris")
     window.show_view(GameView())
     arcade.run()
