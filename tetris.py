@@ -150,7 +150,7 @@ class Board:
             add_cells(piece.shape, piece.position - piece.origin, piece.color)
     
     def is_piece_colliding(self, piece):
-        """True/False: is the piece within the bounds and not overlapping pieces already placed on the board?"""
+        """Is the piece overlapping the board or out of bounds?"""
 
         for y, row in enumerate(piece.shape):
             for x, cell in enumerate(row):
