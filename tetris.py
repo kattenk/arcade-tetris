@@ -92,8 +92,7 @@ class Board:
     def __init__(self, width, height, window_width, window_height, pieces=[]):
         self.width, self.height = (width, height)
         self.window_width, self.window_height = (window_width, window_height)
-        self.cells = [["_"] * width for _ in range(height)]
-
+        self.cells = [["_" for _ in range(self.width)] for _ in range(self.height)]
         self.pieces = pieces
 
         # TODO: nice comment here
@@ -101,7 +100,7 @@ class Board:
         self.update_sprites()
 
     def create_sprites(self):
-        sprites = [[None for _ in range(self.height)] for _ in range(self.width)]
+        sprites = [[None for _ in range(self.width)] for _ in range(self.height)]
         sprite_list = arcade.SpriteList()
 
         cell_size = Vec2(self.window_width // self.width,
@@ -124,7 +123,7 @@ class Board:
                                                       center_y=center.y,
                                                       color=color)
 
-                sprites[x][y] = cell_sprite
+                sprites[y][x] = cell_sprite
                 sprite_list.append(cell_sprite)
         
         return sprites, sprite_list
@@ -143,26 +142,31 @@ class Board:
                     if cell == "O":
                         color_to_use = arcade.color.YANKEES_BLUE
 
-                    self.sprites[x + position.x][y + position.y].color = color_to_use
+                    self.sprites[y + position.y][x + position.x].color = color_to_use
 
         add_cells(self.cells, Vec2(0, 0))
 
         for piece in self.pieces:
             add_cells(piece.shape, piece.position - piece.origin, piece.color)
     
-    def is_within_bounds(self, piece):
-        """True/False: is the piece within the bounds of the board?"""
+    def is_piece_colliding(self, piece):
+        """True/False: is the piece within the bounds and not overlapping pieces already placed on the board?"""
 
-        shape_width, shape_height = (len(piece.shape[0]), len(piece.shape))
+        for y, row in enumerate(piece.shape):
+            for x, cell in enumerate(row):
+                if cell != "_":
+                    x_pos, y_pos = piece.position - piece.origin + Vec2(x, y)
 
-        min_position = piece.position - piece.origin
+                    rows = len(self.cells)
+                    cols = len(self.cells[0])
 
-        max_position = Vec2(min_position.x + shape_width, min_position.y + shape_height)
+                    if x_pos < 0 or x_pos >= cols or y_pos < 0 or y_pos >= rows:
+                        return True
 
-        if max_position.x > self.width or max_position.y > self.height or min_position.x < 0 or max_position.y < 0:
-            return False
-        else:
-            return True
+                    if self.cells[y_pos][x_pos] != "_":
+                        return True
+
+        return False
 
 class GameView(arcade.View):
     def __init__(self):
@@ -189,14 +193,25 @@ class GameView(arcade.View):
         self.input = Input(REPEAT_DELAY, REPEAT_RATE, controls)
         self.on_key_press = self.input.on_key_press
         self.on_key_release = self.input.on_key_release
+
+        # Initialize gravity timer with 1 second
+        self.gravity_timer = 1
     
+    def on_update(self, delta_time):
+        self.input.process_input(delta_time)
+        self.apply_gravity(delta_time)
+
+    def on_draw(self):
+        self.clear()
+        self.board.sprite_list.draw()
+
     def rotate(self, d: Direction):
         pass
     
     def move(self, d: Direction):
         self.falling_piece.position += d.value
 
-        if not self.board.is_within_bounds(self.falling_piece):
+        if self.board.is_piece_colliding(self.falling_piece):
             self.falling_piece.position -= d.value
         else:
             self.board.update_sprites()
@@ -215,12 +230,15 @@ class GameView(arcade.View):
 
         return new_piece
     
-    def on_update(self, delta_time):
-        self.input.process_input(delta_time)
+    def apply_gravity(self, delta_time):
+        if self.gravity_timer <= 0:
+            self.falling_piece.position += Direction.DOWN.value
+            self.gravity_timer = 1
 
-    def on_draw(self):
-        self.clear()
-        self.board.sprite_list.draw()
+            print(f"{self.board.is_piece_colliding(self.falling_piece) = }")
+            self.board.update_sprites()
+
+        self.gravity_timer -= delta_time
 
 class Input:
     def __init__(self, repeat_delay, repeat_rate, controls):
