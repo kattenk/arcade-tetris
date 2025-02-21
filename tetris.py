@@ -87,13 +87,59 @@ class Piece:
                 return
         
         self.origin = Vec2(0, 0)
+    
+    def rotate(self, board):
+        # Rotate the shape clockwise and update origin
+        transpose = [list(row) for row in zip(*self.shape)]
+        self.shape = transpose[::-1]
+        self.update_origin()
+
+        # When a rotation causes a piece to intersect a wall, it needs to be "pushed" out of it behind the scenes..
+        # https://tetris.wiki/Wall_kick
+        if board.is_piece_colliding(self):
+            # Define a helper function for moving a piece in a direction a number of times.
+            def move_piece(direction, distance):
+                for _ in range(distance):
+                    self.position += direction
+
+            # For every direction there is, find out how much distance it takes in that direction,
+            # until the piece no longer collides (if any) and then record that in a dictionary
+            distance_needed = {}
+            
+            for direction in Direction:
+                for distance in range(1, 4):
+                    move_piece(direction.value, distance)
+
+                    if not board.is_piece_colliding(self):
+                        distance_needed[direction] = distance
+                        # Move the piece back to its original position
+                        move_piece(-direction.value, distance)
+                        break
+
+                    # Move back to the original position if still colliding
+                    move_piece(-direction.value, distance)
+
+            # If any directions were valid escape routes..
+            if distance_needed:
+                # Pick the shortest one,
+                # using the 'key' parameter so min() compares the distances instead of the keys
+                lowest_direction = min(distance_needed, key=distance_needed.get)
+
+                # Escape!
+                move_piece(lowest_direction.value, distance_needed[lowest_direction])
+            else:
+                # If there is no escape, undo the original rotation, we will not rotate at all.
+                # (Notice the inversion of the clockwise argument)
+                pass
+
+        board.update_sprites()
 
 class Board:
-    def __init__(self, width, height, window_width, window_height, pieces=[]):
+    def __init__(self, width, height, window_width, window_height):
         self.width, self.height = (width, height)
         self.window_width, self.window_height = (window_width, window_height)
-        self.cells = [["_" for _ in range(self.width)] for _ in range(self.height)]
-        self.pieces = pieces
+        self.cells = [[None for _ in range(self.width)] for _ in range(self.height)]
+        self.pieces = []
 
         # TODO: nice comment here
         self.sprites, self.sprite_list = self.create_sprites()
@@ -134,15 +180,16 @@ class Board:
 
             for y, row in enumerate(cells):
                 for x, cell in enumerate(row):
-                    if cell == "_":
-                        color_to_use = empty_cell_color
-                    else:
-                        color_to_use = color if color is not None else cell
-                    
-                    if cell == "O":
-                        color_to_use = arcade.color.YANKEES_BLUE
+                    if cell != "_":
+                        if cell is None:
+                            color_to_use = empty_cell_color
+                        else:
+                            color_to_use = color if color is not None else cell
+                        
+                        if cell == "O":
+                            color_to_use = arcade.color.YANKEES_BLUE
 
-                    self.sprites[y + position.y][x + position.x].color = color_to_use
+                        self.sprites[y + position.y][x + position.x].color = color_to_use
 
         add_cells(self.cells, Vec2(0, 0))
 
@@ -150,7 +197,7 @@ class Board:
             add_cells(piece.shape, piece.position - piece.origin, piece.color)
     
     def is_piece_colliding(self, piece):
-        """Is the piece overlapping the board or out of bounds?"""
+        """Is the piece overlapping any of the cells on the board or out of bounds?"""
 
         for y, row in enumerate(piece.shape):
             for x, cell in enumerate(row):
@@ -163,29 +210,39 @@ class Board:
                     if x_pos < 0 or x_pos >= cols or y_pos < 0 or y_pos >= rows:
                         return True
 
-                    if self.cells[y_pos][x_pos] != "_":
+                    if self.cells[y_pos][x_pos] != None:
                         return True
 
         return False
+    
+    def place_piece(self, piece):
+        """Inserts the piece into the board and removes it from the piece list."""
+
+        for y, row in enumerate(piece.shape):
+            for x, cell in enumerate(row):
+                if cell != "_":
+                    x_pos, y_pos = piece.position - piece.origin + Vec2(x, y)
+                    self.cells[y_pos][x_pos] = piece.color
+        
+        self.pieces.remove(piece)
 
 class GameView(arcade.View):
     def __init__(self):
         super().__init__()
 
+        # Initialize the board, which will also handle drawing our falling piece
+        self.board = Board(BOARD_WIDTH, BOARD_HEIGHT, self.width, self.height)
+
         # Spawn the first piece
         self.falling_piece = self.spawn_piece()
-
-        # Initialize the board, which will also handle drawing our falling piece
-        self.board = Board(BOARD_WIDTH, BOARD_HEIGHT, self.width, self.height,
-                           pieces=[self.falling_piece])
 
         # Define the game controls
         controls = {
             #                 Method        Argument         Should Repeat
-            arcade.key.UP:    (self.rotate, Direction.RIGHT, False),
-            arcade.key.DOWN:  (self.rotate, Direction.LEFT,  False),
+            arcade.key.UP:    (self.rotate, None,            False),
             arcade.key.LEFT:  (self.move,   Direction.LEFT,  True),
             arcade.key.RIGHT: (self.move,   Direction.RIGHT, True),
+            arcade.key.DOWN:  (self.move,   Direction.DOWN,  True),
             arcade.key.SPACE: (self.drop,   None,            False)
         }
 
@@ -205,10 +262,14 @@ class GameView(arcade.View):
         self.clear()
         self.board.sprite_list.draw()
 
-    def rotate(self, d: Direction):
-        pass
+    def rotate(self):
+        """Rotates the piece clockwise"""
+        
+        self.falling_piece.rotate(self.board)
     
     def move(self, d: Direction):
+        """Moves the piece left or right"""
+
         self.falling_piece.position += d.value
 
         if self.board.is_piece_colliding(self.falling_piece):
@@ -217,25 +278,45 @@ class GameView(arcade.View):
             self.board.update_sprites()
     
     def drop(self):
-        pass
+        """Performs a hard-drop."""
+        
+        while not self.board.is_piece_colliding(self.falling_piece):
+            self.falling_piece.position += Direction.DOWN.value
+        
+        self.falling_piece.position += Direction.UP.value
+
+        # Place and spawn new piece
+        self.board.place_piece(self.falling_piece)
+        self.falling_piece = self.spawn_piece()
     
     def spawn_piece(self) -> Piece:
         """Creates a new piece at the top of the board and returns it."""
-        
+
         tetromino = random.choice(Piece.get_all_tetrominoes())
         new_piece = Piece(tetromino, Vec2(0, 0))
 
         # Calculate the starting position at the top-center of the board
         new_piece.position = Vec2(x=BOARD_WIDTH // 2, y=BOARD_HEIGHT - len(tetromino[0]) + new_piece.origin.y)
 
+        self.board.pieces.append(new_piece)
+        self.board.update_sprites()
+
         return new_piece
     
     def apply_gravity(self, delta_time):
+        """Applies gravity and will place the piece and re-spawn upon collision."""
+
         if self.gravity_timer <= 0:
             self.falling_piece.position += Direction.DOWN.value
             self.gravity_timer = 1
 
-            print(f"{self.board.is_piece_colliding(self.falling_piece) = }")
+            if self.board.is_piece_colliding(self.falling_piece):
+                self.falling_piece.position += Direction.UP.value
+
+                # Place and spawn new piece
+                self.board.place_piece(self.falling_piece)
+                self.falling_piece = self.spawn_piece()
+
             self.board.update_sprites()
 
         self.gravity_timer -= delta_time
@@ -248,36 +329,45 @@ class Input:
 
         self.keys = set()
         self.last_keys = set()
-        self.repeat_delay_timer = 0
-        self.repeat_rate_timer = 0
-    
+        self.repeat_delay_timers = {}
+        self.repeat_rate_timers = {}
+
     def process_input(self, delta_time):
+        # Process input for each pressed key
         for key in self.keys:
-            if key in self.controls.keys():
-                if self.repeat_delay_timer <= 0 or key not in self.last_keys:
-                    if self.repeat_rate_timer <= 0:
+            if key in self.controls:
+                delay_timer = self.repeat_delay_timers.setdefault(key, 0)
+                rate_timer = self.repeat_rate_timers.setdefault(key, 0)
+
+                if delay_timer <= 0 or key not in self.last_keys:
+                    if rate_timer <= 0:
                         method, argument, should_repeat = self.controls[key]
 
+                        # Execute the action for the key
                         if argument:
                             method(argument)
                         else:
                             method()
-                        
-                        self.repeat_rate_timer = self.repeat_rate
 
-        self.repeat_delay_timer -= delta_time
-        self.repeat_rate_timer -= delta_time
+                        # Set repeat rate timer, if the action shouldn't repeat, set it to infinity
+                        self.repeat_rate_timers[key] = self.repeat_rate if should_repeat else float('inf')
+
+        # Update the timers for all pressed keys
+        for key in self.keys:
+            self.repeat_delay_timers[key] -= delta_time
+            self.repeat_rate_timers[key] -= delta_time
+        
         self.last_keys = self.keys.copy()
-    
+
     def on_key_press(self, key, modifiers):
         self.keys.add(key)
-        self.repeat_delay_timer = self.repeat_delay
-        self.repeat_rate_timer = 0
-    
+        self.repeat_delay_timers[key] = self.repeat_delay
+        self.repeat_rate_timers[key] = 0
+
     def on_key_release(self, key, modifiers):
         self.keys.discard(key)
-        self.repeat_delay_timer = 0
-        self.repeat_rate_timer = 0
+        self.repeat_delay_timers.pop(key, None)
+        self.repeat_rate_timers.pop(key, None)
 
 # You could put this outside of the "if __name__ == "__main__"" block
 # but this theoretically allows you to load this file without starting the game
