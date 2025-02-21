@@ -63,7 +63,7 @@ class Piece:
     def get_all_tetrominoes():
         return Piece.I, Piece.J, Piece.L, Piece.O, Piece.S, Piece.T, Piece.Z
     
-    def __init__(self, tetromino, position, rotation=Direction.UP):
+    def __init__(self, tetromino, position, is_shadow=False):
         # Each tetromino is a tuple of shape and color
         self.shape, self.color = tetromino
 
@@ -73,7 +73,10 @@ class Piece:
         self.origin: Vec2 = None
         self.update_origin()
         self.position = position
-        self.rotation = rotation
+
+        if not is_shadow:
+            self.shadow = Piece(tetromino, position, is_shadow=True)
+            self.update_shadow()
     
     def update_origin(self):
         """
@@ -88,13 +91,19 @@ class Piece:
         
         self.origin = Vec2(0, 0)
     
+    def update_shadow(self, board):
+        while not board.is_piece_colliding(self.shadow):
+            self.shadow.position += Direction.DOWN
+        
+        self.shadow.position += Direction.UP
+    
     def rotate(self, board):
         # Rotate the shape clockwise and update origin
         transpose = [list(row) for row in zip(*self.shape)]
         self.shape = transpose[::-1]
         self.update_origin()
 
-        # When a rotation causes a piece to intersect a wall, it needs to be "pushed" out of it behind the scenes..
+        # When a rotation causes a piece to intersect a wall, it needs to be "pushed" out of it.
         # https://tetris.wiki/Wall_kick
         if board.is_piece_colliding(self):
             # Define a helper function for moving a piece in a direction a number of times.
@@ -163,11 +172,14 @@ class Board:
                 gap_width = cell_size.x // 7
 
                 # Arcade can generate a sprite that's just a solid color for us -- without needing to load a file
-                cell_sprite = arcade.SpriteSolidColor(width=cell_size.x - gap_width,
-                                                      height=cell_size.y - gap_width,
-                                                      center_x=center.x,
-                                                      center_y=center.y,
-                                                      color=color)
+                # cell_sprite = arcade.SpriteSolidColor(width=cell_size.x - gap_width,
+                #                                       height=cell_size.y - gap_width,
+                #                                       center_x=center.x,
+                #                                       center_y=center.y,
+                #                                       color=color)
+                cell_sprite = arcade.Sprite("sprite.png", 1, center.x, center.y)
+                cell_sprite.width = cell_size.x
+                cell_sprite.height = cell_size.y
 
                 sprites[y][x] = cell_sprite
                 sprite_list.append(cell_sprite)
@@ -186,8 +198,8 @@ class Board:
                         else:
                             color_to_use = color if color is not None else cell
                         
-                        if cell == "O":
-                            color_to_use = arcade.color.YANKEES_BLUE
+                        # if cell == "O":
+                        #     color_to_use = arcade.color.YANKEES_BLUE
 
                         self.sprites[y + position.y][x + position.x].color = color_to_use
 
@@ -230,28 +242,26 @@ class GameView(arcade.View):
     def __init__(self):
         super().__init__()
 
-        # Initialize the board, which will also handle drawing our falling piece
+        # Board and falling piece
         self.board = Board(BOARD_WIDTH, BOARD_HEIGHT, self.width, self.height)
-
-        # Spawn the first piece
         self.falling_piece = self.spawn_piece()
 
-        # Define the game controls
+        # Input
         controls = {
-            #                 Method        Argument         Should Repeat
-            arcade.key.UP:    (self.rotate, None,            False),
-            arcade.key.LEFT:  (self.move,   Direction.LEFT,  True),
-            arcade.key.RIGHT: (self.move,   Direction.RIGHT, True),
-            arcade.key.DOWN:  (self.move,   Direction.DOWN,  True),
-            arcade.key.SPACE: (self.drop,   None,            False)
+            #                  Method        Argument         Should Repeat
+            arcade.key.UP:     (self.rotate, None,            False),
+            arcade.key.LEFT:   (self.move,   Direction.LEFT,  True),
+            arcade.key.RIGHT:  (self.move,   Direction.RIGHT, True),
+            arcade.key.DOWN:   (self.move,   Direction.DOWN,  True),
+            arcade.key.SPACE:  (self.drop,   None,            False),
+            arcade.key.ESCAPE: (quit,        None,            False)
         }
 
-        # Initialize the input system with the controls
         self.input = Input(REPEAT_DELAY, REPEAT_RATE, controls)
         self.on_key_press = self.input.on_key_press
         self.on_key_release = self.input.on_key_release
 
-        # Initialize gravity timer with 1 second
+        # Gravity
         self.gravity_timer = 1
     
     def on_update(self, delta_time):
@@ -260,21 +270,23 @@ class GameView(arcade.View):
 
     def on_draw(self):
         self.clear()
-        self.board.sprite_list.draw()
+        self.board.sprite_list.draw(pixelated=True)
 
     def rotate(self):
         """Rotates the piece clockwise"""
         
         self.falling_piece.rotate(self.board)
+        arcade.play_sound(arcade.Sound("random3.wav"))
     
     def move(self, d: Direction):
-        """Moves the piece left or right"""
+        """Attempts to move the piece in the direction."""
 
         self.falling_piece.position += d.value
 
         if self.board.is_piece_colliding(self.falling_piece):
             self.falling_piece.position -= d.value
         else:
+            arcade.play_sound(arcade.Sound("click.wav"))
             self.board.update_sprites()
     
     def drop(self):
@@ -288,6 +300,7 @@ class GameView(arcade.View):
         # Place and spawn new piece
         self.board.place_piece(self.falling_piece)
         self.falling_piece = self.spawn_piece()
+        arcade.play_sound(arcade.Sound("hitHurt.wav"))
     
     def spawn_piece(self) -> Piece:
         """Creates a new piece at the top of the board and returns it."""
@@ -322,7 +335,17 @@ class GameView(arcade.View):
         self.gravity_timer -= delta_time
 
 class Input:
-    def __init__(self, repeat_delay, repeat_rate, controls):
+    def __init__(self, repeat_delay, repeat_rate, controls: dict):
+        """
+        Parameters:
+            repeat_delay : float
+                DAS: Time in seconds before an action starts repeating after the first time.
+            repeat_rate : float
+                ARR: Time in seconds between repeats after the initial delay.
+            controls : dict
+                A dictionary mapping keys to actions (method, argument, repeat flag).
+        """
+
         self.repeat_delay = repeat_delay
         self.repeat_rate = repeat_rate
         self.controls = controls
@@ -333,7 +356,6 @@ class Input:
         self.repeat_rate_timers = {}
 
     def process_input(self, delta_time):
-        # Process input for each pressed key
         for key in self.keys:
             if key in self.controls:
                 delay_timer = self.repeat_delay_timers.setdefault(key, 0)
