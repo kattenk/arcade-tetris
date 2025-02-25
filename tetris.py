@@ -4,8 +4,8 @@ from pyglet.math import Vec2
 BOARD_WIDTH = 10
 BOARD_HEIGHT = 20
 
-# In the Tetris community, "Repeat Delay" is referred to as "DAS" (Delayed Auto-Shift)
-# and "Repeat Rate" is called "ARR" (Auto Repeat Rate). I attempted to give them more descriptive names
+# In the Tetris community, "repeat delay" is referred to as "DAS" (Delayed Auto-Shift)
+# and "repeat rate" is called "ARR" (Auto Repeat Rate). I attempted to give them more descriptive names
 # for this demo. you can read more about it here: https://tetris.wiki/DAS
 REPEAT_DELAY = 0.167
 REPEAT_RATE = 0.033
@@ -63,7 +63,7 @@ class Piece:
     def get_all_tetrominoes():
         return Piece.I, Piece.J, Piece.L, Piece.O, Piece.S, Piece.T, Piece.Z
     
-    def __init__(self, tetromino, position, is_shadow=False):
+    def __init__(self, tetromino, position):
         # Each tetromino is a tuple of shape and color
         self.shape, self.color = tetromino
 
@@ -73,11 +73,10 @@ class Piece:
         self.origin: Vec2 = None
         self.update_origin()
         self.position = position
-
-        if not is_shadow:
-            self.shadow = Piece(tetromino, position, is_shadow=True)
-            self.update_shadow()
     
+    def move(self, direction: Vec2, distance=1):
+        self.position += direction * distance
+
     def update_origin(self):
         """
         Sets the Piece's "origin" to the offset of the 'O' character within it's shape.
@@ -91,12 +90,6 @@ class Piece:
         
         self.origin = Vec2(0, 0)
     
-    def update_shadow(self, board):
-        while not board.is_piece_colliding(self.shadow):
-            self.shadow.position += Direction.DOWN
-        
-        self.shadow.position += Direction.UP
-    
     def rotate(self, board):
         # Rotate the shape clockwise and update origin
         transpose = [list(row) for row in zip(*self.shape)]
@@ -106,27 +99,22 @@ class Piece:
         # When a rotation causes a piece to intersect a wall, it needs to be "pushed" out of it.
         # https://tetris.wiki/Wall_kick
         if board.is_piece_colliding(self):
-            # Define a helper function for moving a piece in a direction a number of times.
-            def move_piece(direction, distance):
-                for _ in range(distance):
-                    self.position += direction
-
             # For every direction there is, find out how much distance it takes in that direction,
             # until the piece no longer collides (if any) and then record that in a dictionary
             distance_needed = {}
             
             for direction in Direction:
                 for distance in range(1, 4):
-                    move_piece(direction.value, distance)
+                    self.move(direction.value, distance)
 
                     if not board.is_piece_colliding(self):
                         distance_needed[direction] = distance
                         # Move the piece back to its original position
-                        move_piece(-direction.value, distance)
+                        self.move(-direction.value, distance)
                         break
 
                     # Move back to the original position if still colliding
-                    move_piece(-direction.value, distance)
+                    self.move(-direction.value, distance)
 
             # If any directions were valid escape routes..
             if distance_needed:
@@ -135,10 +123,11 @@ class Piece:
                 lowest_direction = min(distance_needed, key=distance_needed.get)
 
                 # Escape!
-                move_piece(lowest_direction.value, distance_needed[lowest_direction])
+                self.move(lowest_direction.value, distance_needed[lowest_direction])
             else:
                 # If there is no escape, undo the original rotation, we will not rotate at all.
                 # (Notice the inversion of the clockwise argument)
+                # TODO: ACTUALLY IMPLEMENT
                 pass
 
         board.update_sprites()
@@ -148,7 +137,7 @@ class Board:
         self.width, self.height = (width, height)
         self.window_width, self.window_height = (window_width, window_height)
         self.cells = [[None for _ in range(self.width)] for _ in range(self.height)]
-        self.pieces = []
+        self.piece = None
 
         # TODO: nice comment here
         self.sprites, self.sprite_list = self.create_sprites()
@@ -204,9 +193,12 @@ class Board:
                         self.sprites[y + position.y][x + position.x].color = color_to_use
 
         add_cells(self.cells, Vec2(0, 0))
+        
+        if self.piece:
+            shadow = self.create_shadow()
+            add_cells(shadow.shape, shadow.position - shadow.origin, (53, 53, 87))
 
-        for piece in self.pieces:
-            add_cells(piece.shape, piece.position - piece.origin, piece.color)
+            add_cells(self.piece.shape, self.piece.position - self.piece.origin, self.piece.color)
     
     def is_piece_colliding(self, piece):
         """Is the piece overlapping any of the cells on the board or out of bounds?"""
@@ -235,8 +227,16 @@ class Board:
                 if cell != "_":
                     x_pos, y_pos = piece.position - piece.origin + Vec2(x, y)
                     self.cells[y_pos][x_pos] = piece.color
+    
+    def create_shadow(self) -> Piece:
+        shadow = Piece((list(self.piece.shape)[::-1], arcade.color.GRAY), Vec2(int(self.piece.position.x), int(self.piece.position.y)))
+
+        while not self.is_piece_colliding(shadow):
+            shadow.move(Direction.DOWN.value)
         
-        self.pieces.remove(piece)
+        shadow.move(Direction.UP.value)
+        
+        return shadow
 
 class GameView(arcade.View):
     def __init__(self):
@@ -281,10 +281,10 @@ class GameView(arcade.View):
     def move(self, d: Direction):
         """Attempts to move the piece in the direction."""
 
-        self.falling_piece.position += d.value
+        self.falling_piece.move(d.value)
 
         if self.board.is_piece_colliding(self.falling_piece):
-            self.falling_piece.position -= d.value
+            self.falling_piece.move(-d.value)
         else:
             arcade.play_sound(arcade.Sound("click.wav"))
             self.board.update_sprites()
@@ -293,9 +293,9 @@ class GameView(arcade.View):
         """Performs a hard-drop."""
         
         while not self.board.is_piece_colliding(self.falling_piece):
-            self.falling_piece.position += Direction.DOWN.value
+            self.falling_piece.move(Direction.DOWN.value)
         
-        self.falling_piece.position += Direction.UP.value
+        self.falling_piece.move(Direction.UP.value)
 
         # Place and spawn new piece
         self.board.place_piece(self.falling_piece)
@@ -311,7 +311,7 @@ class GameView(arcade.View):
         # Calculate the starting position at the top-center of the board
         new_piece.position = Vec2(x=BOARD_WIDTH // 2, y=BOARD_HEIGHT - len(tetromino[0]) + new_piece.origin.y)
 
-        self.board.pieces.append(new_piece)
+        self.board.piece = new_piece
         self.board.update_sprites()
 
         return new_piece
@@ -320,19 +320,24 @@ class GameView(arcade.View):
         """Applies gravity and will place the piece and re-spawn upon collision."""
 
         if self.gravity_timer <= 0:
-            self.falling_piece.position += Direction.DOWN.value
+            self.falling_piece.move(Direction.DOWN.value)
             self.gravity_timer = 1
 
             if self.board.is_piece_colliding(self.falling_piece):
-                self.falling_piece.position += Direction.UP.value
+                self.falling_piece.move(Direction.UP.value)
 
                 # Place and spawn new piece
                 self.board.place_piece(self.falling_piece)
                 self.falling_piece = self.spawn_piece()
+                arcade.play_sound(arcade.Sound("hitHurt.wav"))
 
             self.board.update_sprites()
 
         self.gravity_timer -= delta_time
+
+class Progression:
+    def __init__(self):
+        pass
 
 class Input:
     def __init__(self, repeat_delay, repeat_rate, controls: dict):
