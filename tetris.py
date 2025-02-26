@@ -246,6 +246,7 @@ class GameView(arcade.View):
         self.board = Board(BOARD_WIDTH, BOARD_HEIGHT, self.width, self.height)
         self.falling_piece = self.spawn_piece()
 
+        # TODO: Use Lambdas?
         # Input
         controls = {
             #                  Method        Argument         Should Repeat
@@ -334,10 +335,6 @@ class GameView(arcade.View):
             self.board.update_sprites()
 
         self.gravity_timer -= delta_time
-
-class Progression:
-    def __init__(self):
-        pass
 
 class Input:
     def __init__(self, repeat_delay, repeat_rate, controls: dict):
