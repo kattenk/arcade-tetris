@@ -231,8 +231,28 @@ class Board:
 
         return False
     
-    def get_clearable_lines(self):
-        pass
+    def clear_lines(self) -> int:
+        """Clears lines and returns the number of lines cleared"""
+
+        lines = []
+        for y, row in enumerate(self.cells):
+            if None not in row:
+                lines.append(y)
+        
+        for line in sorted(lines, reverse=True):
+            self.cells.pop(line)
+
+            # Create a new row filled with None
+            new_row = [None] * len(self.cells[0])
+
+            # Append the new row at the end (which in this case is the top 
+            # due to the reversed Y between lists and Arcade)
+            self.cells.append(new_row)
+        
+        if lines:
+            self.update_sprites()
+        
+        return len(lines)
     
     def place_piece(self, piece):
         """Inserts the piece into the board and removes it from the piece list."""
@@ -319,6 +339,7 @@ class GameView(arcade.View):
         # Place and spawn new piece
         self.board.place_piece(self.falling_piece)
         self.falling_piece = self.spawn_piece()
+        self.board.clear_lines()
         
         if sound_drop:
             arcade.play_sound(sound_drop)
@@ -350,6 +371,7 @@ class GameView(arcade.View):
                 # Place and spawn new piece
                 self.board.place_piece(self.falling_piece)
                 self.falling_piece = self.spawn_piece()
+                self.board.clear_lines()
 
                 if sound_drop:
                     arcade.play_sound(sound_drop)
