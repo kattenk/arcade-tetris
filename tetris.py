@@ -10,6 +10,17 @@ BOARD_HEIGHT = 20
 REPEAT_DELAY = 0.167
 REPEAT_RATE = 0.033
 
+# This game is designed to work without any asset files,
+# so load them if present, otherwise set them to None
+try:
+    sound_rotate = arcade.load_sound("sound_rotate.wav")
+    sound_move = arcade.load_sound("sound_move.wav")
+    sound_drop = arcade.load_sound("sound_drop.wav")
+except FileNotFoundError:
+    sound_rotate = None
+    sound_move = None
+    sound_drop = None
+
 class Direction(enum.Enum):
     """
     Direction in coordinate system where the origin is in the
@@ -109,6 +120,7 @@ class Piece:
 
                     if not board.is_piece_colliding(self):
                         distance_needed[direction] = distance
+                        
                         # Move the piece back to its original position
                         self.move(-direction.value, distance)
                         break
@@ -219,6 +231,9 @@ class Board:
 
         return False
     
+    def get_clearable_lines(self):
+        pass
+    
     def place_piece(self, piece):
         """Inserts the piece into the board and removes it from the piece list."""
 
@@ -246,16 +261,15 @@ class GameView(arcade.View):
         self.board = Board(BOARD_WIDTH, BOARD_HEIGHT, self.width, self.height)
         self.falling_piece = self.spawn_piece()
 
-        # TODO: Use Lambdas?
         # Input
         controls = {
-            #                  Method        Argument         Should Repeat
-            arcade.key.UP:     (self.rotate, None,            False),
-            arcade.key.LEFT:   (self.move,   Direction.LEFT,  True),
-            arcade.key.RIGHT:  (self.move,   Direction.RIGHT, True),
-            arcade.key.DOWN:   (self.move,   Direction.DOWN,  True),
-            arcade.key.SPACE:  (self.drop,   None,            False),
-            arcade.key.ESCAPE: (quit,        None,            False)
+            #                  Action                               Should Repeat
+            arcade.key.UP:     (lambda: self.rotate(),              False),
+            arcade.key.LEFT:   (lambda: self.move(Direction.LEFT),  True),
+            arcade.key.RIGHT:  (lambda: self.move(Direction.RIGHT), True),
+            arcade.key.DOWN:   (lambda: self.move(Direction.DOWN),  True),
+            arcade.key.SPACE:  (lambda: self.drop(),                False),
+            arcade.key.ESCAPE: (lambda: quit(),                     False)
         }
 
         self.input = Input(REPEAT_DELAY, REPEAT_RATE, controls)
@@ -277,7 +291,9 @@ class GameView(arcade.View):
         """Rotates the piece clockwise"""
         
         self.falling_piece.rotate(self.board)
-        arcade.play_sound(arcade.Sound("random3.wav"))
+
+        if sound_rotate:
+            arcade.play_sound(sound_rotate)
     
     def move(self, d: Direction):
         """Attempts to move the piece in the direction."""
@@ -287,7 +303,9 @@ class GameView(arcade.View):
         if self.board.is_piece_colliding(self.falling_piece):
             self.falling_piece.move(-d.value)
         else:
-            arcade.play_sound(arcade.Sound("click.wav"))
+            if sound_move:
+                arcade.play_sound(sound_move)
+            
             self.board.update_sprites()
     
     def drop(self):
@@ -301,7 +319,9 @@ class GameView(arcade.View):
         # Place and spawn new piece
         self.board.place_piece(self.falling_piece)
         self.falling_piece = self.spawn_piece()
-        arcade.play_sound(arcade.Sound("hitHurt.wav"))
+        
+        if sound_drop:
+            arcade.play_sound(sound_drop)
     
     def spawn_piece(self) -> Piece:
         """Creates a new piece at the top of the board and returns it."""
@@ -330,7 +350,9 @@ class GameView(arcade.View):
                 # Place and spawn new piece
                 self.board.place_piece(self.falling_piece)
                 self.falling_piece = self.spawn_piece()
-                arcade.play_sound(arcade.Sound("hitHurt.wav"))
+
+                if sound_drop:
+                    arcade.play_sound(sound_drop)
 
             self.board.update_sprites()
 
@@ -365,13 +387,8 @@ class Input:
 
                 if delay_timer <= 0 or key not in self.last_keys:
                     if rate_timer <= 0:
-                        method, argument, should_repeat = self.controls[key]
-
-                        # Execute the action for the key
-                        if argument:
-                            method(argument)
-                        else:
-                            method()
+                        method, should_repeat = self.controls[key] # Unpack the data for this action
+                        method() # Execute the action for the key
 
                         # Set repeat rate timer, if the action shouldn't repeat, set it to infinity
                         self.repeat_rate_timers[key] = self.repeat_rate if should_repeat else float('inf')
