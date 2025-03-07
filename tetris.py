@@ -1,8 +1,11 @@
-import arcade, enum, random
+import arcade, enum, random, math, colorsys, os
 from pyglet.math import Vec2
 
 BOARD_WIDTH = 10
 BOARD_HEIGHT = 20
+
+WINDOW_WIDTH = 400
+WINDOW_HEIGHT = 600
 
 # In the Tetris community, "repeat delay" is referred to as "DAS" (Delayed Auto-Shift)
 # and "repeat rate" is called "ARR" (Auto Repeat Rate). I attempted to give them more descriptive names
@@ -10,16 +13,19 @@ BOARD_HEIGHT = 20
 REPEAT_DELAY = 0.167
 REPEAT_RATE = 0.033
 
+arcade.resources.load_kenney_fonts()
+
 # This game is designed to work without any asset files,
 # so load them if present, otherwise set them to None
-try:
-    sound_rotate = arcade.load_sound("sound_rotate.wav")
-    sound_move = arcade.load_sound("sound_move.wav")
-    sound_drop = arcade.load_sound("sound_drop.wav")
-except FileNotFoundError:
-    sound_rotate = None
-    sound_move = None
-    sound_drop = None
+def load_asset(loader, path):
+    """Helper function to load an asset if it exists, otherwise return None."""
+    return loader(path) if os.path.exists(path) else None
+
+# Load assets safely
+rotate_sound = load_asset(arcade.load_sound, "sound_rotate.wav")
+move_sound = load_asset(arcade.load_sound, "sound_move.wav")
+drop_sound = load_asset(arcade.load_sound, "sound_drop.wav")
+cell_sprite = load_asset(lambda _: "sprite_cell.png", "sprite_cell.png")
 
 class Direction(enum.Enum):
     """
@@ -38,10 +44,10 @@ class Piece:
     # T = Filled cell
     # O = Origin (center) point (This is used for producing the rotated versions of tetrominoes)
 
-    I = ([["T"],
-          ["O"],
-          ["T"],
-          ["T"]],
+    I = ([["T",
+           "O",
+           "T",
+           "T"]],
           (0, 209, 146))
 
     J = ([["_", "T"],
@@ -70,6 +76,10 @@ class Piece:
           ["_", "O", "T"]],
           (202, 7, 67))
     
+    # We reverse the row order of each shape because Arcade uses a coordinate system where positive Y is up
+    for shape, _ in I, J, L, O, S, T, Z:
+        shape.reverse()
+    
     @staticmethod
     def get_all_tetrominoes():
         return Piece.I, Piece.J, Piece.L, Piece.O, Piece.S, Piece.T, Piece.Z
@@ -77,9 +87,6 @@ class Piece:
     def __init__(self, tetromino, position):
         # Each tetromino is a tuple of shape and color
         self.shape, self.color = tetromino
-
-        # We reverse the row order of the shape because Arcade uses a coordinate system where positive Y is up
-        self.shape.reverse()
 
         self.origin: Vec2 = None
         self.update_origin()
@@ -156,6 +163,11 @@ class Board:
         self.update_sprites()
 
     def create_sprites(self):
+        """
+        Called once, this populates self.sprites and self.sprites_list with a sprite
+        for each cell on the board.
+        """
+
         sprites = [[None for _ in range(self.width)] for _ in range(self.height)]
         sprite_list = arcade.SpriteList()
 
@@ -168,26 +180,36 @@ class Board:
 
                 center = Vec2((x * cell_size.x) + cell_size.x / 2,
                               (y * cell_size.y) + cell_size.y / 2)
-                
-                # Make the gaps proportional to the cell-size
-                gap_width = cell_size.x // 7
 
-                # Arcade can generate a sprite that's just a solid color for us -- without needing to load a file
-                # cell_sprite = arcade.SpriteSolidColor(width=cell_size.x - gap_width,
-                #                                       height=cell_size.y - gap_width,
-                #                                       center_x=center.x,
-                #                                       center_y=center.y,
-                #                                       color=color)
-                cell_sprite = arcade.Sprite("sprite.png", 1, center.x, center.y)
-                cell_sprite.width = cell_size.x
-                cell_sprite.height = cell_size.y
+                # If "sprite_cell.png" is present
+                if cell_sprite:
+                    sprite = arcade.Sprite(cell_sprite)
+                    sprite.center_x = center.x
+                    sprite.center_y = center.y
+                    sprite.width = cell_size.x
+                    sprite.height = cell_size.y
+                else:
+                    # Create a solid-colored fallback sprite
+                    border_thickness = cell_size.x // 7
+                    sprite = arcade.SpriteSolidColor(
+                        width=cell_size.x - border_thickness,
+                        height=cell_size.y - border_thickness,
+                        center_x=center.x,
+                        center_y=center.y,
+                        color=color
+                    )
 
-                sprites[y][x] = cell_sprite
-                sprite_list.append(cell_sprite)
+                sprites[y][x] = sprite
+                sprite_list.append(sprite)
         
         return sprites, sprite_list
     
     def update_sprites(self):
+        """
+        Updates the color of the sprites to reflect the current state of the board (self.cells)
+        this is called when the state changes.
+        """
+
         def add_cells(cells, position, color=None):
             empty_cell_color = (8, 6, 27)
 
@@ -198,9 +220,6 @@ class Board:
                             color_to_use = empty_cell_color
                         else:
                             color_to_use = color if color is not None else cell
-                        
-                        # if cell == "O":
-                        #     color_to_use = arcade.color.YANKEES_BLUE
 
                         self.sprites[y + position.y][x + position.x].color = color_to_use
 
@@ -236,16 +255,19 @@ class Board:
 
         lines = []
         for y, row in enumerate(self.cells):
+            # If there aren't any holes in this row..
             if None not in row:
                 lines.append(y)
         
-        for line in sorted(lines, reverse=True):
+        # Loop over the lines in reverse order,
+        # otherwise the removal of lines during the loop would cause issues
+        for line in reversed(lines):
             self.cells.pop(line)
 
             # Create a new row filled with None
             new_row = [None] * len(self.cells[0])
 
-            # Append the new row at the end (which in this case is the top 
+            # Append the new row at the end (which is the top 
             # due to the reversed Y between lists and Arcade)
             self.cells.append(new_row)
         
@@ -264,7 +286,11 @@ class Board:
                     self.cells[y_pos][x_pos] = piece.color
     
     def create_shadow(self) -> Piece:
-        shadow = Piece((list(self.piece.shape)[::-1], arcade.color.GRAY), Vec2(int(self.piece.position.x), int(self.piece.position.y)))
+        # When creating our shadow Piece, we reverse the shape because the piece
+        # constructor reverses the shape itself (assuming it came from one of the template shapes)
+        # so we need to account for that
+        shadow = Piece(tetromino=(self.piece.shape, arcade.color.GRAY),
+                       position=Vec2(int(self.piece.position.x), int(self.piece.position.y)))
 
         while not self.is_piece_colliding(shadow):
             shadow.move(Direction.DOWN.value)
@@ -272,6 +298,41 @@ class Board:
         shadow.move(Direction.UP.value)
         
         return shadow
+
+class GameOverView(arcade.View):
+    def __init__(self, lines_cleared):
+        super().__init__()
+
+        self.lines_cleared = lines_cleared
+        self.game_over_text = None
+        self.score_text = None
+        self.time = 0
+
+    def on_show_view(self):
+        self.game_over_text = arcade.Text("Game Over", self.window.width / 2, self.window.height / 2,
+                                          anchor_x="center", anchor_y="center",
+                                          font_size=20, font_name="Kenney Pixel Square")
+        
+        self.score_text = arcade.Text(f"{self.lines_cleared} lines, level {self.lines_cleared // 10}",
+                                      self.window.width / 2, self.window.height / 2 - 30,
+                                      anchor_x="center", anchor_y="center",
+                                      font_size=10, font_name="Kenney Pixel Square")
+    
+    def on_update(self, delta_time):
+        hue = (self.time % 6) / 6  # Cycle through hues smoothly (0 to 1)
+        r, g, b = colorsys.hsv_to_rgb(hue, 1, 1)  # Convert HSV to RGB
+        s = int(r * 255), int(g * 255), int(b * 255)
+
+        self.game_over_text.color = s
+        self.time += delta_time
+    
+    def on_key_press(self, key, modifiers):
+        game_view = GameView()
+        self.window.show_view(game_view)
+
+    def on_draw(self):
+        self.game_over_text.draw()
+        self.score_text.draw()
 
 class GameView(arcade.View):
     def __init__(self):
@@ -284,20 +345,27 @@ class GameView(arcade.View):
         # Input
         controls = {
             #                  Action                               Should Repeat
-            arcade.key.UP:     (lambda: self.rotate(),              False),
+            arcade.key.UP:     (self.rotate,                        False),
             arcade.key.LEFT:   (lambda: self.move(Direction.LEFT),  True),
             arcade.key.RIGHT:  (lambda: self.move(Direction.RIGHT), True),
             arcade.key.DOWN:   (lambda: self.move(Direction.DOWN),  True),
             arcade.key.SPACE:  (lambda: self.drop(),                False),
-            arcade.key.ESCAPE: (lambda: quit(),                     False)
+            arcade.key.ESCAPE: (quit,                               False)
         }
 
         self.input = Input(REPEAT_DELAY, REPEAT_RATE, controls)
         self.on_key_press = self.input.on_key_press
         self.on_key_release = self.input.on_key_release
 
-        # Gravity
         self.gravity_timer = 1
+        self.lines_cleared = 0
+        
+        self.update_caption()
+    
+    def update_caption(self):
+        plural = "" if self.lines_cleared == 1 else "s"
+        level = self.lines_cleared // 10
+        self.window.set_caption(f"Tetris - {self.lines_cleared} line{plural} | Level {level}")
     
     def on_update(self, delta_time):
         self.input.process_input(delta_time)
@@ -312,8 +380,8 @@ class GameView(arcade.View):
         
         self.falling_piece.rotate(self.board)
 
-        if sound_rotate:
-            arcade.play_sound(sound_rotate)
+        if rotate_sound:
+            arcade.play_sound(rotate_sound)
     
     def move(self, d: Direction):
         """Attempts to move the piece in the direction."""
@@ -323,10 +391,16 @@ class GameView(arcade.View):
         if self.board.is_piece_colliding(self.falling_piece):
             self.falling_piece.move(-d.value)
         else:
-            if sound_move:
-                arcade.play_sound(sound_move)
+            if move_sound:
+                arcade.play_sound(move_sound)
             
             self.board.update_sprites()
+    
+    def place_piece(self):
+        self.board.place_piece(self.falling_piece)
+        self.falling_piece = self.spawn_piece()
+        self.lines_cleared += self.board.clear_lines()
+        self.update_caption()
     
     def drop(self):
         """Performs a hard-drop."""
@@ -337,12 +411,10 @@ class GameView(arcade.View):
         self.falling_piece.move(Direction.UP.value)
 
         # Place and spawn new piece
-        self.board.place_piece(self.falling_piece)
-        self.falling_piece = self.spawn_piece()
-        self.board.clear_lines()
+        self.place_piece()
         
-        if sound_drop:
-            arcade.play_sound(sound_drop)
+        if drop_sound:
+            arcade.play_sound(drop_sound)
     
     def spawn_piece(self) -> Piece:
         """Creates a new piece at the top of the board and returns it."""
@@ -352,6 +424,11 @@ class GameView(arcade.View):
 
         # Calculate the starting position at the top-center of the board
         new_piece.position = Vec2(x=BOARD_WIDTH // 2, y=BOARD_HEIGHT - len(tetromino[0]) + new_piece.origin.y)
+
+        if self.board.is_piece_colliding(new_piece):
+            game_over_view = GameOverView(self.lines_cleared)
+            self.window.show_view(game_over_view)
+            return None
 
         self.board.piece = new_piece
         self.board.update_sprites()
@@ -363,18 +440,16 @@ class GameView(arcade.View):
 
         if self.gravity_timer <= 0:
             self.falling_piece.move(Direction.DOWN.value)
-            self.gravity_timer = 1
+            self.gravity_timer = 0.8 / (1 + 0.1 * (self.lines_cleared / 10))
 
             if self.board.is_piece_colliding(self.falling_piece):
                 self.falling_piece.move(Direction.UP.value)
 
-                # Place and spawn new piece
-                self.board.place_piece(self.falling_piece)
-                self.falling_piece = self.spawn_piece()
-                self.board.clear_lines()
+                # If this application of gravity caused the piece to collide...
+                self.place_piece()
 
-                if sound_drop:
-                    arcade.play_sound(sound_drop)
+                if drop_sound:
+                    arcade.play_sound(drop_sound)
 
             self.board.update_sprites()
 
