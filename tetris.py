@@ -222,14 +222,16 @@ class Board:
                             color_to_use = color if color is not None else cell
 
                         self.sprites[y + position.y][x + position.x].color = color_to_use
+        try:
+            add_cells(self.cells, Vec2(0, 0))
+            
+            if self.piece:
+                shadow = self.create_shadow()
+                add_cells(shadow.shape, shadow.position - shadow.origin, (53, 53, 87))
 
-        add_cells(self.cells, Vec2(0, 0))
-        
-        if self.piece:
-            shadow = self.create_shadow()
-            add_cells(shadow.shape, shadow.position - shadow.origin, (53, 53, 87))
-
-            add_cells(self.piece.shape, self.piece.position - self.piece.origin, self.piece.color)
+                add_cells(self.piece.shape, self.piece.position - self.piece.origin, self.piece.color)
+        except IndexError:
+            pass
     
     def is_piece_colliding(self, piece):
         """Is the piece overlapping any of the cells on the board or out of bounds?"""
@@ -331,6 +333,7 @@ class GameOverView(arcade.View):
         self.window.show_view(game_view)
 
     def on_draw(self):
+        self.clear()
         self.game_over_text.draw()
         self.score_text.draw()
 
@@ -440,6 +443,8 @@ class GameView(arcade.View):
 
         if self.gravity_timer <= 0:
             self.falling_piece.move(Direction.DOWN.value)
+
+            # Progression system
             self.gravity_timer = 0.8 / (1 + 0.1 * (self.lines_cleared / 10))
 
             if self.board.is_piece_colliding(self.falling_piece):
